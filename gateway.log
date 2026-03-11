@@ -1,0 +1,194 @@
+2026-03-11 17:46:32,888 - INFO - Connected (version 2.0, client OpenSSH_5.3)
+2026-03-11 17:46:43,420 - INFO - Authentication (password) successful!
+2026-03-11 17:46:47,591 - INFO - [chan 1] Opened sftp connection (server version 3)
+2026-03-11 17:46:48,338 - INFO - [chan 1] sftp session closed.
+2026-03-11 17:46:50,520 - INFO - Job submitted: job_id=1355, uuid=2ca24639-8708-40aa-8627-c3a3accf43c5, cores=8, memory=4096, queue=medium_priority
+2026-03-11 17:47:11,221 - ERROR - HPC command failed | exit=255 | stderr=bjobs: illegal option -- n
+Usage: /shared/ibm/platform_lsf/9.1/linux2.6-glibc2.3-x86_64/bin/bjobs [-A] [-a] [-cname] [-aps | -l [-aff] | -UF [-aff] | -w ] [-d] [-p] [-s] [-r] [-W] [-X] [-x]
+             [-app application_profile_name] [-g job_group_name]
+             [-sla service_class_name] [-J job_name] [-Jd job_description] [-Lp ls_project_name]
+             [-m "host_name ..." | -m host_group | -m cluster_name] 
+             [-N host_name | -N host_model | -N cpu_factor]
+             [-P project_name] [-q queue_name]
+             [-u user_name | -u user_group | -u all | -G user_group]
+             [jobId | "jobId[index_list]" ...]
+
+       /shared/ibm/platform_lsf/9.1/linux2.6-glibc2.3-x86_64/bin/bjobs [-a] [-aps] [-d] [-cname] [-p] [-s] [-r] [-WL] [-WF] [-WP] [-X] [-x]
+             [-app application_profile_name] [-g job_group_name]
+             [-sla service_class_name] [-J job_name] [-Jd job_description] [-Lp ls_project_name]
+             [-m "host_name ..." | -m host_group | -m cluster_name] 
+             [-P project_name] [-q queue_name]
+             [-u user_name | -u user_group | -u all | -G user_group]
+             [jobId | "jobId[index_list]" ...]
+
+       /shared/ibm/platform_lsf/9.1/linux2.6-glibc2.3-x86_64/bin/bjobs [-a] [-l [-aff] | -UF [-aff] | -w ] [-d] [-cname] [-p] [-s] [-ss] [-r] [-X] [-x]
+             [-app application_profile_name] [-g job_group_name]
+             [-sla service_class_name] [-J job_name] [-Jd job_description] [-Lp ls_project_name]
+             [-m "host_name ..." | -m host_group | -m cluster_name] 
+             [-P project_name] [-q queue_name]
+             [-u user_name | -u user_group | -u all | -G user_group]
+             [jobId | "jobId[index_list]" ...]
+
+       /shared/ibm/platform_lsf/9.1/linux2.6-glibc2.3-x86_64/bin/bjobs [-a] [-aps | -l [-aff] | -w ] [-fwd] [-cname] [-p] [-s] [-r] [-WL] [-WF] [-WP] [-X]
+             [-app application_profile_name] [-g job_group_name]
+             [-J job_name] [-Jd job_description] [-Lp ls_project_name]
+             [-m "host_name ..." | -m host_group | -m cluster_name] 
+             [-P project_name] [-q queue_name]
+             [-u user_name | -u user_group | -u all | -G user_group]
+             [jobId | "jobId[index_list]" ...]
+
+       /shared/ibm/platform_lsf/9.1/linux2.6-glibc2.3-x86_64/bin/bjobs [-a] [-aps | -l [-aff] | -UF [-aff] | -w ] [-fwd] [-cname] [-p] [-s] [-r] [-W] [-X]
+             [-app application_profile_name] [-g job_group_name]
+             [-J job_name] [-Jd job_description] [-Lp ls_project_name]
+             [-m "host_name ..." | -m host_group | -m cluster_name] 
+             [-N host_name | -N host_model | -N cpu_factor]
+             [-P project_name] [-q queue_name]
+             [-u user_name | -u user_group | -u all | -G user_group]
+             [jobId | "jobId[index_list]" ...]
+
+       /shared/ibm/platform_lsf/9.1/linux2.6-glibc2.3-x86_64/bin/bjobs [-p] [-s] [-sum] [-r]
+             [-app application_profile_name] [-g job_group_name]
+             [-fwd | -sla service_class_name] [-J job_name] [-Jd job_description] [-Lp ls_project_name]
+             [-m "host_name ..." | -m host_group | -m cluster_name] 
+             [-P project_name] [-q queue_name]
+             [-u user_name | -u user_group | -u all | -G user_group]
+             [jobId | "jobId[index_list]" ...]
+
+       /shared/ibm/platform_lsf/9.1/linux2.6-glibc2.3-x86_64/bin/bjobs [-h] [-V]
+
+             [-WL | -WP | -WF] output key:
+             X: The real run time has exceeded the configured run time
+             L: A run limit exists but job does not have a configured run time
+             E: A configured run time exists and has not been exceeded
+2026-03-11 17:47:36,867 - ERROR - HPC command failed | exit=255 | stderr=bjobs: illegal option -- n
+Usage: /shared/ibm/platform_lsf/9.1/linux2.6-glibc2.3-x86_64/bin/bjobs [-A] [-a] [-cname] [-aps | -l [-aff] | -UF [-aff] | -w ] [-d] [-p] [-s] [-r] [-W] [-X] [-x]
+             [-app application_profile_name] [-g job_group_name]
+             [-sla service_class_name] [-J job_name] [-Jd job_description] [-Lp ls_project_name]
+             [-m "host_name ..." | -m host_group | -m cluster_name] 
+             [-N host_name | -N host_model | -N cpu_factor]
+             [-P project_name] [-q queue_name]
+             [-u user_name | -u user_group | -u all | -G user_group]
+             [jobId | "jobId[index_list]" ...]
+
+       /shared/ibm/platform_lsf/9.1/linux2.6-glibc2.3-x86_64/bin/bjobs [-a] [-aps] [-d] [-cname] [-p] [-s] [-r] [-WL] [-WF] [-WP] [-X] [-x]
+             [-app application_profile_name] [-g job_group_name]
+             [-sla service_class_name] [-J job_name] [-Jd job_description] [-Lp ls_project_name]
+             [-m "host_name ..." | -m host_group | -m cluster_name] 
+             [-P project_name] [-q queue_name]
+             [-u user_name | -u user_group | -u all | -G user_group]
+             [jobId | "jobId[index_list]" ...]
+
+       /shared/ibm/platform_lsf/9.1/linux2.6-glibc2.3-x86_64/bin/bjobs [-a] [-l [-aff] | -UF [-aff] | -w ] [-d] [-cname] [-p] [-s] [-ss] [-r] [-X] [-x]
+             [-app application_profile_name] [-g job_group_name]
+             [-sla service_class_name] [-J job_name] [-Jd job_description] [-Lp ls_project_name]
+             [-m "host_name ..." | -m host_group | -m cluster_name] 
+             [-P project_name] [-q queue_name]
+             [-u user_name | -u user_group | -u all | -G user_group]
+             [jobId | "jobId[index_list]" ...]
+
+       /shared/ibm/platform_lsf/9.1/linux2.6-glibc2.3-x86_64/bin/bjobs [-a] [-aps | -l [-aff] | -w ] [-fwd] [-cname] [-p] [-s] [-r] [-WL] [-WF] [-WP] [-X]
+             [-app application_profile_name] [-g job_group_name]
+             [-J job_name] [-Jd job_description] [-Lp ls_project_name]
+             [-m "host_name ..." | -m host_group | -m cluster_name] 
+             [-P project_name] [-q queue_name]
+             [-u user_name | -u user_group | -u all | -G user_group]
+             [jobId | "jobId[index_list]" ...]
+
+       /shared/ibm/platform_lsf/9.1/linux2.6-glibc2.3-x86_64/bin/bjobs [-a] [-aps | -l [-aff] | -UF [-aff] | -w ] [-fwd] [-cname] [-p] [-s] [-r] [-W] [-X]
+             [-app application_profile_name] [-g job_group_name]
+             [-J job_name] [-Jd job_description] [-Lp ls_project_name]
+             [-m "host_name ..." | -m host_group | -m cluster_name] 
+             [-N host_name | -N host_model | -N cpu_factor]
+             [-P project_name] [-q queue_name]
+             [-u user_name | -u user_group | -u all | -G user_group]
+             [jobId | "jobId[index_list]" ...]
+
+       /shared/ibm/platform_lsf/9.1/linux2.6-glibc2.3-x86_64/bin/bjobs [-p] [-s] [-sum] [-r]
+             [-app application_profile_name] [-g job_group_name]
+             [-fwd | -sla service_class_name] [-J job_name] [-Jd job_description] [-Lp ls_project_name]
+             [-m "host_name ..." | -m host_group | -m cluster_name] 
+             [-P project_name] [-q queue_name]
+             [-u user_name | -u user_group | -u all | -G user_group]
+             [jobId | "jobId[index_list]" ...]
+
+       /shared/ibm/platform_lsf/9.1/linux2.6-glibc2.3-x86_64/bin/bjobs [-h] [-V]
+
+             [-WL | -WP | -WF] output key:
+             X: The real run time has exceeded the configured run time
+             L: A run limit exists but job does not have a configured run time
+             E: A configured run time exists and has not been exceeded
+2026-03-11 17:50:07,598 - ERROR - HPC command failed | exit=255 | stderr=bjobs: illegal option -- n
+Usage: /shared/ibm/platform_lsf/9.1/linux2.6-glibc2.3-x86_64/bin/bjobs [-A] [-a] [-cname] [-aps | -l [-aff] | -UF [-aff] | -w ] [-d] [-p] [-s] [-r] [-W] [-X] [-x]
+             [-app application_profile_name] [-g job_group_name]
+             [-sla service_class_name] [-J job_name] [-Jd job_description] [-Lp ls_project_name]
+             [-m "host_name ..." | -m host_group | -m cluster_name] 
+             [-N host_name | -N host_model | -N cpu_factor]
+             [-P project_name] [-q queue_name]
+             [-u user_name | -u user_group | -u all | -G user_group]
+             [jobId | "jobId[index_list]" ...]
+
+       /shared/ibm/platform_lsf/9.1/linux2.6-glibc2.3-x86_64/bin/bjobs [-a] [-aps] [-d] [-cname] [-p] [-s] [-r] [-WL] [-WF] [-WP] [-X] [-x]
+             [-app application_profile_name] [-g job_group_name]
+             [-sla service_class_name] [-J job_name] [-Jd job_description] [-Lp ls_project_name]
+             [-m "host_name ..." | -m host_group | -m cluster_name] 
+             [-P project_name] [-q queue_name]
+             [-u user_name | -u user_group | -u all | -G user_group]
+             [jobId | "jobId[index_list]" ...]
+
+       /shared/ibm/platform_lsf/9.1/linux2.6-glibc2.3-x86_64/bin/bjobs [-a] [-l [-aff] | -UF [-aff] | -w ] [-d] [-cname] [-p] [-s] [-ss] [-r] [-X] [-x]
+             [-app application_profile_name] [-g job_group_name]
+             [-sla service_class_name] [-J job_name] [-Jd job_description] [-Lp ls_project_name]
+             [-m "host_name ..." | -m host_group | -m cluster_name] 
+             [-P project_name] [-q queue_name]
+             [-u user_name | -u user_group | -u all | -G user_group]
+             [jobId | "jobId[index_list]" ...]
+
+       /shared/ibm/platform_lsf/9.1/linux2.6-glibc2.3-x86_64/bin/bjobs [-a] [-aps | -l [-aff] | -w ] [-fwd] [-cname] [-p] [-s] [-r] [-WL] [-WF] [-WP] [-X]
+             [-app application_profile_name] [-g job_group_name]
+             [-J job_name] [-Jd job_description] [-Lp ls_project_name]
+             [-m "host_name ..." | -m host_group | -m cluster_name] 
+             [-P project_name] [-q queue_name]
+             [-u user_name | -u user_group | -u all | -G user_group]
+             [jobId | "jobId[index_list]" ...]
+
+       /shared/ibm/platform_lsf/9.1/linux2.6-glibc2.3-x86_64/bin/bjobs [-a] [-aps | -l [-aff] | -UF [-aff] | -w ] [-fwd] [-cname] [-p] [-s] [-r] [-W] [-X]
+             [-app application_profile_name] [-g job_group_name]
+             [-J job_name] [-Jd job_description] [-Lp ls_project_name]
+             [-m "host_name ..." | -m host_group | -m cluster_name] 
+             [-N host_name | -N host_model | -N cpu_factor]
+             [-P project_name] [-q queue_name]
+             [-u user_name | -u user_group | -u all | -G user_group]
+             [jobId | "jobId[index_list]" ...]
+
+       /shared/ibm/platform_lsf/9.1/linux2.6-glibc2.3-x86_64/bin/bjobs [-p] [-s] [-sum] [-r]
+             [-app application_profile_name] [-g job_group_name]
+             [-fwd | -sla service_class_name] [-J job_name] [-Jd job_description] [-Lp ls_project_name]
+             [-m "host_name ..." | -m host_group | -m cluster_name] 
+             [-P project_name] [-q queue_name]
+             [-u user_name | -u user_group | -u all | -G user_group]
+             [jobId | "jobId[index_list]" ...]
+
+       /shared/ibm/platform_lsf/9.1/linux2.6-glibc2.3-x86_64/bin/bjobs [-h] [-V]
+
+             [-WL | -WP | -WF] output key:
+             X: The real run time has exceeded the configured run time
+             L: A run limit exists but job does not have a configured run time
+             E: A configured run time exists and has not been exceeded
+2026-03-11 17:55:15,349 - INFO - Connected (version 2.0, client OpenSSH_5.3)
+2026-03-11 17:55:44,229 - INFO - Authentication (password) successful!
+2026-03-11 17:55:51,574 - INFO - [chan 1] Opened sftp connection (server version 3)
+2026-03-11 17:56:02,199 - INFO - [chan 1] sftp session closed.
+2026-03-11 17:56:12,863 - INFO - Job submitted: job_id=1356, uuid=4eb24323-9fc0-4e11-9391-ae8318354601, cores=16, memory=4096, queue=medium_priority
+2026-03-11 17:57:12,676 - INFO - Fetching output: job_id=1356, uuid=4eb24323-9fc0-4e11-9391-ae8318354601
+2026-03-11 18:00:16,720 - INFO - Connected (version 2.0, client OpenSSH_5.3)
+2026-03-11 18:00:27,406 - INFO - Authentication (password) successful!
+2026-03-11 18:00:30,053 - INFO - [chan 1] Opened sftp connection (server version 3)
+2026-03-11 18:00:32,957 - INFO - [chan 1] sftp session closed.
+2026-03-11 18:00:34,225 - INFO - Job submitted: job_id=1357, uuid=8c07fae6-37cc-4e14-8006-f1a544599cbf, cores=16, memory=4096, queue=medium_priority
+2026-03-11 18:01:01,318 - INFO - Fetching output: job_id=1357, uuid=8c07fae6-37cc-4e14-8006-f1a544599cbf
+2026-03-11 18:05:56,122 - INFO - Connected (version 2.0, client OpenSSH_5.3)
+2026-03-11 18:06:06,557 - INFO - Authentication (password) successful!
+2026-03-11 18:06:09,889 - INFO - [chan 1] Opened sftp connection (server version 3)
+2026-03-11 18:06:11,026 - INFO - [chan 1] sftp session closed.
+2026-03-11 18:06:12,271 - INFO - Job submitted: job_id=1358, uuid=a4fe71ec-43ce-4272-89f5-9be09e47c07e, cores=16, memory=4096, queue=medium_priority
+2026-03-11 18:08:09,870 - INFO - Fetching output: job_id=1358, uuid=a4fe71ec-43ce-4272-89f5-9be09e47c07e
