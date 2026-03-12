@@ -6,16 +6,16 @@ import tempfile
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 
 from app.core.config import (
-    LSF_PATH, REMOTE_JOB_DIR,
-    MAX_CORES_PER_JOB, MAX_MEMORY_MB, MIN_MEMORY_MB,
-    MAX_WALL_TIME_HOURS, MIN_WALL_TIME_MINUTES,
-    MAX_JOBS_PER_USER, VALID_QUEUES,
+    LSF_PATH,
+    REMOTE_JOB_DIR,
+    MAX_JOBS_PER_USER,
 )
 from app.core.store    import job_store, job_store_lock
 from app.core.logging  import logger
-from app.schemas.jobs  import (
+from app.schemas.jobs import (
     JobResponse, JobStatus, JobStatusResponse,
     JobCancelResponse, JobOutputResponse, JobErrorResponse,
+    JobSubmitParams,   
 )
 from app.validators.script import validate_script
 from app.services.ssh  import run_ssh_async, transfer_files
@@ -23,7 +23,20 @@ from app.services.lsf  import generate_lsf, generate_sandbox_wrapper
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
+@router.get("/") 
+async def list_jobs():
+    tracked_ids = [
+        jid for jid in job_store.keys()
+        if not jid.startswith("pending_")
+    ]
+    if not tracked_ids:
+        return {"jobs": []}
 
+    id_list = " ".join(tracked_ids)
+
+    # LSF 9.1 compatible:
+    result = await run_ssh_async(f"{LSF_PATH}/bjobs {id_list}")
+    return {"jobs": result} 
 # ==============================
 # SUBMIT
 # ==============================
@@ -37,44 +50,30 @@ async def submit_job(
     wall_time_hours:   int        = Form(...),
     wall_time_minutes: int        = Form(...)
 ):
+    # --- Read file ---
     content = await file.read()
 
     # --- Validate script ---
     validate_script(file, content)
 
-    # --- Validate parameters ---
-    if cores <= 0:
-        raise HTTPException(status_code=400, detail="Cores must be greater than 0")
-    if cores > MAX_CORES_PER_JOB:
-        raise HTTPException(status_code=400, detail=f"Maximum {MAX_CORES_PER_JOB} cores per job!")
-
-    if memory < MIN_MEMORY_MB:
-        raise HTTPException(status_code=400, detail=f"Minimum memory is {MIN_MEMORY_MB}MB")
-    if memory > MAX_MEMORY_MB:
-        raise HTTPException(status_code=400, detail=f"Maximum memory is {MAX_MEMORY_MB}MB per node")
-
-    if wall_time_hours < 0:
-        raise HTTPException(status_code=400, detail="Wall time hours cannot be negative!")
-    if wall_time_minutes < 0 or wall_time_minutes > 59:
-        raise HTTPException(status_code=400, detail="Wall time minutes must be 0-59!")
-
-    total_minutes = wall_time_hours * 60 + wall_time_minutes
-    if total_minutes < MIN_WALL_TIME_MINUTES:
-        raise HTTPException(status_code=400, detail="Minimum wall time is 1 minute!")
-    if total_minutes > MAX_WALL_TIME_HOURS * 60:
-        raise HTTPException(status_code=400, detail=f"Maximum wall time is {MAX_WALL_TIME_HOURS} hours!")
-
-    if not queue.strip():
-        raise HTTPException(status_code=400, detail="Queue name cannot be empty")
-    if queue.strip().lower() not in VALID_QUEUES:
-        raise HTTPException(status_code=400, detail=f"Invalid queue! Valid: {', '.join(VALID_QUEUES)}")
+    # --- Validate parameters via Pydantic ---
+    try:
+        params = JobSubmitParams(
+            cores=cores,
+            memory=memory,
+            queue=queue,
+            wall_time_hours=wall_time_hours,
+            wall_time_minutes=wall_time_minutes
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     # --- Reserve job slot (TOCTOU-safe) ---
     with job_store_lock:
         if len(job_store) >= MAX_JOBS_PER_USER:
             raise HTTPException(
                 status_code=429,
-                detail=f"Maximum {MAX_JOBS_PER_USER} jobs allowed (including pending submissions)!"
+                detail=f"Maximum {MAX_JOBS_PER_USER} jobs allowed!"
             )
         unique_id = str(uuid.uuid4())
         job_store[f"pending_{unique_id}"] = unique_id
@@ -94,8 +93,12 @@ async def submit_job(
 
             with open(local_lsf, "w") as f:
                 f.write(generate_lsf(
-                    unique_id, cores, memory, queue,
-                    wall_time_hours, wall_time_minutes
+                    unique_id,
+                    params.cores,           # ← params
+                    params.memory,          # ← params
+                    params.queue,           # ← params
+                    params.wall_time_hours, # ← params
+                    params.wall_time_minutes# ← params
                 ))
 
             await transfer_files(local_script, local_lsf, local_sandbox, unique_id)
@@ -106,7 +109,10 @@ async def submit_job(
 
             match = re.search(r"Job <(\d+)>", result)
             if not match:
-                raise HTTPException(status_code=500, detail=f"Job submission failed: {result}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Job submission failed: {result}"
+                )
 
             job_id = match.group(1)
 
@@ -116,7 +122,8 @@ async def submit_job(
 
             logger.info(
                 f"Job submitted: job_id={job_id}, uuid={unique_id}, "
-                f"cores={cores}, memory={memory}, queue={queue}"
+                f"cores={params.cores}, memory={params.memory}, "  # ← params
+                f"queue={params.queue}, file={file.filename}"       # ← params
             )
 
             return JobResponse(
@@ -124,7 +131,11 @@ async def submit_job(
                 status=JobStatus.PEND.value,
                 output_file=f"output_{unique_id}.log",
                 error_file=f"error_{unique_id}.log",
-                wall_time=f"{wall_time_hours:02d}:{wall_time_minutes:02d}"
+                wall_time=f"{params.wall_time_hours:02d}:{params.wall_time_minutes:02d}",
+                script_filename=file.filename,  # ← NEW
+                cores=params.cores,             # ← NEW
+                memory=params.memory,           # ← NEW
+                queue=params.queue              # ← NEW
             )
 
         except Exception:
@@ -133,8 +144,7 @@ async def submit_job(
             raise
 
 
-# ==============================
-# STATUS
+
 # ==============================
 
 @router.get("/{job_id}/status", response_model=JobStatusResponse)
@@ -250,17 +260,4 @@ async def cancel_job(job_id: str):
 # ==============================
 # LIST
 # ==============================
-@router.get("/", response_model=dict)
-async def list_jobs():
-    tracked_ids = [
-        jid for jid in job_store.keys()
-        if not jid.startswith("pending_")
-    ]
-    if not tracked_ids:
-        return {"jobs": []}
 
-    id_list = " ".join(tracked_ids)
-
-    # LSF 9.1 compatible:
-    result = await run_ssh_async(f"{LSF_PATH}/bjobs {id_list}")
-    return {"jobs": result}
