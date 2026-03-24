@@ -1,4 +1,3 @@
-version: '3.9'
 
 services:
   nginx:
@@ -9,13 +8,14 @@ services:
       - "80:80"
       - "443:443"
     volumes:
+      # نربط مجلد الإعدادات الجديد
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
-      - ./nginx/certs:/etc/nginx/certs:ro
+      # نربط مجلد الشهادات الموحد (الموجود في المجلد الرئيسي)
+      - ./certs:/etc/nginx/certs:ro
     depends_on:
       - fastapi
     networks:
       - hpc-net
-
   postgres:
     image: postgres:16
     container_name: hpc-postgres
