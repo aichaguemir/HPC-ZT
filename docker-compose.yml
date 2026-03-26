@@ -1,4 +1,3 @@
-
 services:
   nginx:
     image: nginx:alpine
@@ -8,14 +7,14 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      # نربط مجلد الإعدادات الجديد
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
-      # نربط مجلد الشهادات الموحد (الموجود في المجلد الرئيسي)
       - ./certs:/etc/nginx/certs:ro
     depends_on:
       - fastapi
+      - keycloak
     networks:
       - hpc-net
+
   postgres:
     image: postgres:16
     container_name: hpc-postgres
@@ -33,30 +32,39 @@ services:
     build: ./backend
     container_name: hpc-fastapi
     restart: unless-stopped
+    volumes:
+      - ./certs:/app/certs:ro
+    command: >
+         sh -c "pip install uvicorn fastapi && python -m uvicorn main:app --host 0.0.0.0 --port 8000 --ssl-keyfile /app/certs/server.key --ssl-certfile /app/certs/server.crt"
     expose:
       - "8000"
     depends_on:
       - postgres
     networks:
       - hpc-net
-
   keycloak:
     image: quay.io/keycloak/keycloak:26.0.0
     container_name: hpc-keycloak
     restart: unless-stopped
     environment:
       KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://postgres:5432/hpc_portal
+      KC_DB_URL: jdbc:postgresql://hpc-postgres:5432/hpc_portal
       KC_DB_USERNAME: hpcuser
       KC_DB_PASSWORD: ***REMOVED***
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: ***REMOVED***
       KC_HOSTNAME: localhost
-      KC_HTTP_ENABLED: true
-      KC_HOSTNAME_STRICT: false
+      # إعدادات الـ HTTPS لـ Keycloak
+      KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/conf/server.crt
+      KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/conf/server.key
+      KC_HTTP_ENABLED: "false"
+      KC_HOSTNAME_STRICT: "false"
+    volumes:
+      - ./certs/server.crt:/opt/keycloak/conf/server.crt:ro
+      - ./certs/server.key:/opt/keycloak/conf/server.key:ro
     command: start-dev
     ports:
-      - "8080:8080"
+      - "8443:8443"
     depends_on:
       - postgres
     networks:

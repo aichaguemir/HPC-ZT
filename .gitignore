@@ -1,25 +1,19 @@
-# --- ملفات الأمان (هام جداً) ---
-# نتجاهل مجلد الشهادات لكي لا يرفع لـ GitHub
-certs/
-nginx/certs/
-*.crt
-*.key
-
-# --- ملفات قاعدة البيانات ---
-# لا نريد رفع بيانات قاعدة البيانات المخزنة محلياً
-postgres-data/
-
-# --- ملفات بايثون (لزميلة الـ Backend) ---
+# --- Fichiers Python (Toujours ignorer car ils sont inutiles et créent des conflits) ---
 __pycache__/
 *.py[cod]
 *$py.class
-.env
 .venv
 env/
 venv/
 
-# --- ملفات النظام والبيئة ---
-.DS_Store
-.idea/
-.vscode/
-*.log
+# --- Données de la base de données ---
+# On garde l'ignorance ici pour ne pas écraser les données locales des autres
+postgres-data/
+
+# --- Sécurité TEMPORAIREMENT désactivée ---
+# On commente les lignes suivantes pour que les certificats et les .env soient partagés
+# certs/
+# nginx/certs/
+# .env
+# *.crt
+# *.key
