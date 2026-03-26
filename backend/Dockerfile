@@ -1,7 +1,12 @@
 FROM python:3.11-slim
+
 WORKDIR /app
-# سنقوم بنسخ ملف المتطلبات إذا وجد، وإلا سيتجاهله
-COPY requirements.txt* . 
-RUN pip install --no-cache-dir -r requirements.txt || true
+
+# تثبيت المكتبات الأساسية يدوياً لضمان العمل
+RUN pip install --no-cache-dir uvicorn fastapi
+
+# نسخ الملفات
 COPY . .
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+# تشغيل السيرفر (لاحظي استخدام python -m uvicorn لتجنب مشاكل الـ PATH)
+CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
