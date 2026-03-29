@@ -1,10 +1,6 @@
-from pydantic import BaseModel
-from enum import Enum
 from pydantic import BaseModel, Field, field_validator, model_validator
-from app.core.config import (
-    MAX_CORES_PER_JOB, MAX_MEMORY_MB, MIN_MEMORY_MB,
-    MAX_WALL_TIME_HOURS, MIN_WALL_TIME_MINUTES, VALID_QUEUES
-)
+from enum import Enum
+from typing import Any
 
 
 class JobStatus(str, Enum):
@@ -21,17 +17,17 @@ class JobResponse(BaseModel):
     output_file:     str
     error_file:      str
     wall_time:       str
-    script_filename: str    
-    cores:           int    
-    memory:          int    
-    queue:           str   
+    script_filename: str
+    cores:           int
+    memory:          int
+    queue:           str
 
 
 class JobStatusResponse(BaseModel):
-    job_id:    str
-    status:    str
-    queue:     str
-    cores:     str
+    job_id: str
+    status: str
+    queue:  str
+    cores:  str
 
 
 class JobCancelResponse(BaseModel):
@@ -41,41 +37,46 @@ class JobCancelResponse(BaseModel):
 
 
 class JobOutputResponse(BaseModel):
-    job_id:  str
-    output:  str
+    job_id: str
+    output: str
 
 
 class JobErrorResponse(BaseModel):
     job_id: str
     error:  str
-    
-class JobSubmitParams(BaseModel):
-    cores:             int = Field(..., gt=0,          le=MAX_CORES_PER_JOB,
-                           description=f"CPU cores 1-{MAX_CORES_PER_JOB}")
-    memory:            int = Field(..., ge=MIN_MEMORY_MB, le=MAX_MEMORY_MB,
-                           description=f"Memory MB {MIN_MEMORY_MB}-{MAX_MEMORY_MB}")
-    queue:             str = Field(...,
-                           description=f"One of: {', '.join(VALID_QUEUES)}")
-    wall_time_hours:   int = Field(..., ge=0, le=MAX_WALL_TIME_HOURS)
-    wall_time_minutes: int = Field(..., ge=0, le=59)
 
-    @field_validator('queue')
-    @classmethod
-    def queue_must_be_valid(cls, v):
-        if v.strip().lower() not in VALID_QUEUES:
-            raise ValueError(
-                f"Invalid queue! Valid queues: {', '.join(VALID_QUEUES)}"
-            )
-        return v.strip().lower()
+
+class JobSubmitParams(BaseModel):
+    cores:             int
+    memory:            int
+    queue:             str
+    wall_time_hours:   int
+    wall_time_minutes: int
+    policy:            Any = None  # Policy object from DB
 
     @model_validator(mode='after')
-    def validate_wall_time_total(self):
-        total = self.wall_time_hours * 60 + self.wall_time_minutes
-        if total < MIN_WALL_TIME_MINUTES:
-            raise ValueError("Minimum wall time is 1 minute!")
-        if total > MAX_WALL_TIME_HOURS * 60:
-            raise ValueError(
-                f"Maximum wall time is {MAX_WALL_TIME_HOURS} hours!"
-            )
+    def validate_against_policy(self):
+        p = self.policy
+        if p is None:
+            return self
+
+        if self.cores <= 0:
+            raise ValueError("Cores must be greater than 0")
+        if self.cores > p.max_cores_per_job:
+            raise ValueError(f"Max {p.max_cores_per_job} cores for your role")
+
+        if self.memory < 100:
+            raise ValueError("Minimum memory is 100MB")
+        if self.memory > p.max_memory_mb:
+            raise ValueError(f"Max {p.max_memory_mb}MB for your role")
+
+        total_minutes = self.wall_time_hours * 60 + self.wall_time_minutes
+        if total_minutes < 1:
+            raise ValueError("Minimum wall time is 1 minute")
+        if total_minutes > p.max_wall_time_hours * 60:
+            raise ValueError(f"Max wall time is {p.max_wall_time_hours}h for your role")
+
+        if self.wall_time_minutes < 0 or self.wall_time_minutes > 59:
+            raise ValueError("Wall time minutes must be 0-59")
+
         return self
-    
