@@ -1,10 +1,9 @@
 import re
 import ast
 from fastapi import HTTPException, UploadFile
-
 from app.core.config import (
     MAX_FILE_SIZE,
-    FORBIDDEN_MODULES,
+    ALLOWED_MODULES,
     FORBIDDEN_FUNCTIONS,
     FORBIDDEN_ATTRIBUTES,
 )
@@ -21,24 +20,29 @@ def ast_security_scan(code: str) -> None:
 
     for node in ast.walk(tree):
 
-        # Block: import os / import subprocess
+        # ① Allowlist: import numpy ✅  import os ❌  import unknown ❌
         if isinstance(node, ast.Import):
             for alias in node.names:
-                if alias.name.split('.')[0] in FORBIDDEN_MODULES:
+                top_level = alias.name.split('.')[0]
+                if top_level not in ALLOWED_MODULES:
                     raise HTTPException(
                         status_code=400,
-                        detail=f"Forbidden module: '{alias.name}'"
+                        detail=f"Module '{alias.name}' is not permitted. "
+                               f"Contact your administrator to request access."
                     )
 
-        # Block: from os import system
+        # ② Allowlist: from numpy import array ✅  from os import system ❌
         if isinstance(node, ast.ImportFrom):
-            if node.module and node.module.split('.')[0] in FORBIDDEN_MODULES:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Forbidden module: '{node.module}'"
-                )
+            if node.module:
+                top_level = node.module.split('.')[0]
+                if top_level not in ALLOWED_MODULES:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Module '{node.module}' is not permitted. "
+                               f"Contact your administrator to request access."
+                    )
 
-        # Block: obj.__subclasses__(), obj.__globals__(), obj.eval()
+        # ③ Block: obj.__subclasses__(), obj.__globals__(), obj.eval()
         if isinstance(node, ast.Attribute):
             if node.attr in FORBIDDEN_ATTRIBUTES or node.attr in FORBIDDEN_FUNCTIONS:
                 raise HTTPException(
@@ -46,7 +50,7 @@ def ast_security_scan(code: str) -> None:
                     detail=f"Forbidden attribute: '{node.attr}'"
                 )
 
-        # Block: eval(), exec(), globals()
+        # ④ Block: eval(), exec(), globals()
         if isinstance(node, ast.Call):
             if isinstance(node.func, ast.Name):
                 if node.func.id in FORBIDDEN_FUNCTIONS:
@@ -55,7 +59,7 @@ def ast_security_scan(code: str) -> None:
                         detail=f"Forbidden function: '{node.func.id}'"
                     )
 
-        # Block string-based dunder access: "__import__" as a string
+        # ⑤ Block string-based dunder access: "__import__" as a string
         if isinstance(node, ast.Constant):
             if isinstance(node.value, str):
                 for forbidden in FORBIDDEN_ATTRIBUTES:
