@@ -79,6 +79,8 @@ class User(Base):
     role            : Mapped[str]      = mapped_column(
                           USER_ROLE_TYPE, default='student', nullable=False)
     is_active       : Mapped[bool]     = mapped_column(Boolean, default=True, nullable=False)
+    is_approved    : Mapped[bool]      = mapped_column(Boolean, default=False, nullable=False)
+    requested_role : Mapped[str]       = mapped_column(String, nullable=True)
     failed_attempts : Mapped[int]      = mapped_column(Integer, default=0, nullable=False)
     locked_until    : Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at      : Mapped[datetime] = mapped_column(DateTime(timezone=True),
