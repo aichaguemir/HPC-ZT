@@ -15,7 +15,9 @@ from app.db.models import User, AuditLog
 from app.services.ssh import run_ssh_async
 from app.core.config import LSF_PATH
 from app.core.logging import logger
-
+import httpx
+from app.core.config import KEYCLOAK_URL, KEYCLOAK_REALM
+from app.core.logging import logger
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
@@ -157,52 +159,6 @@ async def reject_user(
     return {"message": f"User {user.username} rejected and removed"}
 
 
-# ── Change role ────────────────────────────────────────────────────────────
-
-@router.put("/users/{user_id}/role")
-async def change_role(
-    user_id:      str,
-    body:         RoleChangeRequest,
-    request:      Request,
-    db:           AsyncSession = Depends(get_db),
-    current_user: User         = Depends(require_admin),
-):
-    valid_roles = {"student", "researcher", "admin"}
-    if body.new_role not in valid_roles:
-        raise HTTPException(400, f"Invalid role. Choose: {', '.join(valid_roles)}")
-
-    result = await db.execute(select(User).where(User.user_id == user_id))
-    user   = result.scalar_one_or_none()
-    if user is None:
-        raise HTTPException(404, "User not found")
-
-    old_role = user.role
-
-    # Update Keycloak — remove old role, assign new
-    await remove_keycloak_role(user.keycloak_id, old_role)
-    await assign_keycloak_role(user.keycloak_id, body.new_role)
-
-    # Update DB
-    user.role = body.new_role
-
-    log = AuditLog(
-        user_id    = current_user.user_id,
-        action     = "role_change",
-        ip_address = request.client.host if request.client else None,
-        detail     = {
-            "target_user": user.username,
-            "old_role":    old_role,
-            "new_role":    body.new_role,
-            "changed_by":  current_user.username,
-        }
-    )
-    db.add(log)
-    await db.commit()
-
-    logger.info(f"Role changed: {user.username} {old_role}→{body.new_role} by {current_user.username}")
-    return {"message": f"Role changed from {old_role} to {body.new_role}"}
-
-
 # ── Deactivate user ────────────────────────────────────────────────────────
 
 @router.post("/users/{user_id}/deactivate")
@@ -267,3 +223,158 @@ async def get_nodes(
             })
 
     return {"nodes": nodes}
+    
+    
+
+
+# ── Reactivate user ────────────────────────────────────────────────────────
+ 
+@router.post("/users/{user_id}/reactivate")
+async def reactivate_user(
+    user_id:      str,
+    request:      Request,
+    db:           AsyncSession = Depends(get_db),
+    current_user: User         = Depends(require_admin),
+):
+    result = await db.execute(select(User).where(User.user_id == user_id))
+    user   = result.scalar_one_or_none()
+    if user is None:
+        raise HTTPException(404, "User not found")
+    if user.is_active:
+        raise HTTPException(400, "User is already active")
+ 
+    # Re-enable in Keycloak
+    token = await get_admin_token()
+    async with httpx.AsyncClient() as client:
+        response = await client.put(
+            f"{KEYCLOAK_URL}/admin/realms/{KEYCLOAK_REALM}/users/{user.keycloak_id}",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"enabled": True}
+        )
+        response.raise_for_status()
+ 
+    # Re-enable in DB
+    user.is_active = True
+ 
+    log = AuditLog(
+        user_id    = current_user.user_id,
+        action     = "role_change",
+        ip_address = request.client.host if request.client else None,
+        detail     = {
+            "target_user":    user.username,
+            "action":         "reactivated",
+            "reactivated_by": current_user.username,
+        }
+    )
+    db.add(log)
+    await db.commit()
+ 
+    logger.info(f"User reactivated: {user.username} by {current_user.username}")
+    return {"message": f"User {user.username} reactivated successfully"}
+ 
+ 
+# ── Revoke approval (back to pending) ─────────────────────────────────────
+ 
+@router.post("/users/{user_id}/revoke")
+async def revoke_user(
+    user_id:      str,
+    request:      Request,
+    db:           AsyncSession = Depends(get_db),
+    current_user: User         = Depends(require_admin),
+):
+    result = await db.execute(select(User).where(User.user_id == user_id))
+    user   = result.scalar_one_or_none()
+    if user is None:
+        raise HTTPException(404, "User not found")
+    if user.user_id == current_user.user_id:
+        raise HTTPException(400, "Cannot revoke yourself")
+    if not user.is_approved:
+        raise HTTPException(400, "User is already pending")
+ 
+    # Remove role from Keycloak
+    if user.role in ("student", "researcher", "admin"):
+        await remove_keycloak_role(user.keycloak_id, user.role)
+ 
+    # Set back to pending in DB
+    user.is_approved = False
+    user.role        = "student"  # minimum role
+ 
+    log = AuditLog(
+        user_id    = current_user.user_id,
+        action     = "role_change",
+        ip_address = request.client.host if request.client else None,
+        detail     = {
+            "target_user": user.username,
+            "action":      "revoked",
+            "revoked_by":  current_user.username,
+        }
+    )
+    db.add(log)
+    await db.commit()
+ 
+    logger.info(f"User revoked: {user.username} by {current_user.username}")
+    return {"message": f"User {user.username} access revoked. Status set to pending."}
+ 
+ 
+# ── REPLACE your existing change_role with this version ───────────────────
+# (adds single-admin enforcement)
+ 
+@router.put("/users/{user_id}/role")
+async def change_role(
+    user_id:      str,
+    body:         RoleChangeRequest,
+    request:      Request,
+    db:           AsyncSession = Depends(get_db),
+    current_user: User         = Depends(require_admin),
+):
+    valid_roles = {"student", "researcher", "admin"}
+    if body.new_role not in valid_roles:
+        raise HTTPException(400, f"Invalid role. Choose: {', '.join(valid_roles)}")
+ 
+    result = await db.execute(select(User).where(User.user_id == user_id))
+    user   = result.scalar_one_or_none()
+    if user is None:
+        raise HTTPException(404, "User not found")
+ 
+    # ── Single admin enforcement ───────────────────────────────────────────
+    if body.new_role == "admin":
+        existing_admin_result = await db.execute(
+            select(User)
+            .where(User.role == "admin")
+            .where(User.user_id != user_id)
+        )
+        if existing_admin_result.scalar_one_or_none():
+            raise HTTPException(
+                400,
+                "System already has an admin. "
+                "Revoke the existing admin's role first before assigning a new one."
+            )
+ 
+    old_role = user.role
+ 
+    # Remove old role, assign new in Keycloak
+    if old_role in valid_roles:
+        await remove_keycloak_role(user.keycloak_id, old_role)
+    await assign_keycloak_role(user.keycloak_id, body.new_role)
+ 
+    # Update DB
+    user.role = body.new_role
+ 
+    log = AuditLog(
+        user_id    = current_user.user_id,
+        action     = "role_change",
+        ip_address = request.client.host if request.client else None,
+        detail     = {
+            "target_user": user.username,
+            "old_role":    old_role,
+            "new_role":    body.new_role,
+            "changed_by":  current_user.username,
+        }
+    )
+    db.add(log)
+    await db.commit()
+ 
+    logger.info(f"Role: {user.username} {old_role}→{body.new_role} by {current_user.username}")
+    return {"message": f"Role changed from {old_role} to {body.new_role}"}
+ 
+
