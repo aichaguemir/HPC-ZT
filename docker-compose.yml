@@ -1,78 +1,68 @@
-services:
-  nginx:
-    image: nginx:alpine
-    container_name: hpc-nginx
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx/conf.d:/etc/nginx/conf.d:ro
-      - ./certs:/etc/nginx/certs:ro
-    depends_on:
-      - fastapi
-      - keycloak
-    networks:
-      - hpc-net
+version: '3.8'
 
+services:
+  # 1. قاعدة البيانات (PostgreSQL) - معزولة تماماً داخل الشبكة
   postgres:
     image: postgres:16
     container_name: hpc-postgres
-    restart: unless-stopped
     environment:
-      POSTGRES_USER: hpcuser
-      POSTGRES_PASSWORD: ***REMOVED***
-      POSTGRES_DB: hpc_portal
+      POSTGRES_USER: asma_user
+      POSTGRES_PASSWORD: asma_password
+      POSTGRES_DB: hpc_db
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
     networks:
       - hpc-net
+    # ملاحظة: لا توجد Ports هنا للأمان (Day 12-13)
 
+  # 2. الباك-إند (FastAPI) - يعمل خلف Nginx فقط
   fastapi:
-    build: ./backend
+    image: hpc-portal-fastapi
     container_name: hpc-fastapi
-    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://asma_user:asma_password@postgres/hpc_db
     volumes:
-      - ./certs:/app/certs:ro
-    command: >
-         sh -c "pip install uvicorn fastapi && python -m uvicorn main:app --host 0.0.0.0 --port 8000 --ssl-keyfile /app/certs/server.key --ssl-certfile /app/certs/server.crt"
-    expose:
-      - "8000"
+      - ./backend:/app          # ربط المجلد المباشر (لإصلاح مشكلة dotenv)
+      - ./certs:/app/certs:ro   # شهادات الـ SSL
+    networks:
+      - hpc-net
     depends_on:
       - postgres
-    networks:
-      - hpc-net
+    # ملاحظة: لا توجد Ports هنا، الوصول يتم عبر Nginx فقط
+
+  # 3. نظام الهوية (Keycloak)
   keycloak:
     image: quay.io/keycloak/keycloak:26.0.0
     container_name: hpc-keycloak
-    restart: unless-stopped
-    environment:
-      KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://hpc-postgres:5432/hpc_portal
-      KC_DB_USERNAME: hpcuser
-      KC_DB_PASSWORD: ***REMOVED***
-      KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: ***REMOVED***
-      KC_HOSTNAME: localhost
-      # إعدادات الـ HTTPS لـ Keycloak
-      KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/conf/server.crt
-      KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/conf/server.key
-      KC_HTTP_ENABLED: "false"
-      KC_HOSTNAME_STRICT: "false"
-    volumes:
-      - ./certs/server.crt:/opt/keycloak/conf/server.crt:ro
-      - ./certs/server.key:/opt/keycloak/conf/server.key:ro
     command: start-dev
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
     ports:
       - "8443:8443"
-    depends_on:
-      - postgres
     networks:
       - hpc-net
+    depends_on:
+      - postgres
 
-volumes:
-  postgres-data:
+  # 4. الـ Proxy (Nginx) - البوابة الوحيدة المفتوحة للعالم الخارجي
+  nginx:
+    image: nginx:alpine
+    container_name: hpc-nginx
+    ports:
+      - "80:80"   # للتحويل التلقائي (Redirect)
+      - "443:443" # المنفذ الرئيسي المشفر
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./certs:/etc/nginx/certs:ro
+    networks:
+      - hpc-net
+    depends_on:
+      - fastapi
 
 networks:
   hpc-net:
     driver: bridge
+
+volumes:
+  postgres_data:
