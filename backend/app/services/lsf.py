@@ -2,22 +2,74 @@ from app.core.config import REMOTE_JOB_DIR
 
 
 def generate_sandbox_wrapper(unique_id: str) -> str:
-    return f"""
-import builtins as _b
+    return f"""import builtins as _b
+import sys as _sys
 
-SAFE = {{
+ALLOWED_MODULES = {{
+    'math', 'cmath', 'decimal', 'fractions', 'random', 'statistics',
+    'itertools', 'functools', 'operator', 'collections', 'heapq',
+    'bisect', 'array', 'string', 're', 'json', 'csv', 'struct',
+    'pathlib', 'datetime', 'time', 'calendar', 'typing', 'dataclasses',
+    'abc', 'enum', 'copy', 'pprint', 'reprlib', 'warnings', 'logging',
+    'traceback', 'argparse', 'textwrap', 'io', 'contextlib',
+    'numpy', 'scipy', 'pandas', 'matplotlib', 'sklearn', 'tensorflow',
+    'torch', 'keras', 'statsmodels', 'sympy', 'numba', 'seaborn',
+    'plotly', 'bokeh', 'h5py', 'zarr', 'xarray', 'PIL', 'cv2',
+    'imageio', 'tifffile', 'multiprocessing', 'concurrent', 'threading',
+    'mpi4py',
+}}
+
+def _safe_import(name, *args, **kwargs):
+    top = name.split('.')[0]
+    if top not in ALLOWED_MODULES:
+        raise ImportError(f"Module '{{top}}' is not permitted")
+    return _original_import(name, *args, **kwargs)
+
+_original_import  = _b.__import__
+_b.__import__     = _safe_import
+
+SAFE = {
     'print', 'len', 'range', 'enumerate', 'zip',
     'map', 'filter', 'sorted', 'reversed', 'sum',
     'min', 'max', 'abs', 'round', 'int', 'float',
     'str', 'bool', 'list', 'dict', 'set', 'tuple',
-    '__import__'
-}}
+    'bytes', 'bytearray', 'memoryview',      # ← needed by import machinery
+    'type', 'isinstance', 'issubclass', 'open',
+    'hasattr', 'getattr', 'setattr',
+    'iter', 'next', 'callable', 'repr',      # ← needed by many libraries
+    'staticmethod', 'classmethod', 'property',
+    'super', 'object',                        # ← needed by classes
+    'id', 'hash', 'hex', 'oct', 'bin',
+    'chr', 'ord',
+    'format', 'vars',
+    'True', 'False', 'None',
+    'NotImplemented', 'Ellipsis',
+    'Exception', 'ValueError', 'TypeError', 'ImportError',
+    'KeyError', 'IndexError', 'StopIteration',
+    'ArithmeticError', 'RuntimeError', 'OSError',
+    'AttributeError', 'NameError', 'ZeroDivisionError',
+    'FileNotFoundError', 'PermissionError',
+    'GeneratorExit', 'SystemExit', 'KeyboardInterrupt',
+    'Warning', 'UserWarning', 'DeprecationWarning',
+    '__import__', '__name__', '__doc__',
+    '__package__', '__spec__', '__loader__', '__builtins__',
+    '__build_class__',                        # ← needed for class definitions
+}
 
-safe_builtins = {{k: getattr(_b, k) for k in SAFE if hasattr(_b, k)}}
+_delattr = delattr
+_open    = open
+_compile = compile
+_exec    = exec
 
-exec(open('script_{unique_id}.py').read(), {{
-    "__builtins__": safe_builtins
-}})
+for _n in list(vars(_b).keys()):
+    if _n not in SAFE:
+        try:
+            _delattr(_b, _n)
+        except AttributeError:
+            pass
+
+with _open('{REMOTE_JOB_DIR}/script_{unique_id}.py', 'r') as _f:
+    _exec(_compile(_f.read(), 'user_script', 'exec'))
 """
 
 def generate_lsf(
