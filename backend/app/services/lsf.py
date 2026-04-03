@@ -2,41 +2,23 @@ from app.core.config import REMOTE_JOB_DIR
 
 
 def generate_sandbox_wrapper(unique_id: str) -> str:
-    """
-    Server-generated wrapper script.
-    Strips dangerous builtins before executing the user script.
-    Never passed through the AST scanner — runs server-side only.
-    """
-    return f"""import builtins as _b
+    return f"""
+import builtins as _b
 
 SAFE = {{
     'print', 'len', 'range', 'enumerate', 'zip',
     'map', 'filter', 'sorted', 'reversed', 'sum',
     'min', 'max', 'abs', 'round', 'int', 'float',
     'str', 'bool', 'list', 'dict', 'set', 'tuple',
-    'type', 'isinstance', 'issubclass',
-    'True', 'False', 'None',
-    'Exception', 'ValueError', 'TypeError',
-    'KeyError', 'IndexError', 'StopIteration', 'ArithmeticError',
+    '__import__'
 }}
 
-# Save these BEFORE the loop — they delete themselves otherwise
-_delattr = delattr
-_open    = open
-_compile = compile
-_exec    = exec
+safe_builtins = {{k: getattr(_b, k) for k in SAFE if hasattr(_b, k)}}
 
-for _n in list(vars(_b).keys()):
-    if _n not in SAFE:
-        try:
-            _delattr(_b, _n)
-        except AttributeError:
-            pass
-
-with _open('{REMOTE_JOB_DIR}/script_{unique_id}.py', 'r') as _f:
-    _exec(_compile(_f.read(), 'user_script', 'exec'))
+exec(open('script_{unique_id}.py').read(), {{
+    "__builtins__": safe_builtins
+}})
 """
-
 
 def generate_lsf(
     unique_id:         str,

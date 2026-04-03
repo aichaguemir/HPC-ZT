@@ -78,9 +78,17 @@ async def run_ssh_async(command: str) -> str:
         )
     except RuntimeError as e:
         detail = str(e)
+
         if "connection" in detail.lower():
-            raise HTTPException(status_code=503, detail="HPC connection failed. Try again later.")
-        raise HTTPException(status_code=500, detail="HPC command failed. Contact administrator.")
+            raise HTTPException(
+            status_code=503,
+            detail=f"HPC connection failed: {detail}"
+        )
+
+    raise HTTPException(
+        status_code=500,
+        detail=f"HPC command failed: {detail}"
+    )
 
 
 # ==============================
@@ -119,9 +127,9 @@ def _transfer_files_sync(
         sftp.put(local_sandbox, f"{REMOTE_JOB_DIR}/sandbox_{unique_id}.py")
         sftp.close()
 
-    except Exception:
-        logger.error("File transfer to HPC failed", exc_info=True)
-        raise RuntimeError("File transfer to HPC failed.")
+    except Exception as e:
+        logger.error(f"File transfer to HPC failed: {e}", exc_info=True)
+        raise RuntimeError(f"File transfer failed: {str(e)}")
 
 async def transfer_files(
     local_script:  str,
