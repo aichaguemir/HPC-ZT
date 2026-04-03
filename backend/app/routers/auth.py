@@ -19,6 +19,8 @@ class RegisterRequest(BaseModel):
     email:          EmailStr
     password:       str
     requested_role: str = "student"
+    first_name:     str = "" 
+    last_name:      str = ""  
 
 
 # ── Register ───────────────────────────────────────────────────────────────
@@ -43,11 +45,13 @@ async def register(
     # Create user in Keycloak
     try:
         keycloak_id = await create_keycloak_user(
-            username = body.username,
-            email    = body.email,
-            password = body.password,
-            enabled  = True,
-        )
+            username   = body.username,
+            email      = body.email,
+            password   = body.password,
+            first_name = body.first_name or body.username,
+            last_name  = body.last_name or "User",
+            enabled    = True,
+    )
     except ValueError as e:
         raise HTTPException(400, str(e))
 
@@ -93,3 +97,26 @@ async def get_me(
     current_user: User = Depends(get_current_user)
 ):
     return UserResponse.model_validate(current_user)
+    
+    
+@router.post("/logout")
+async def logout(
+    current_user: User         = Depends(get_current_user),
+    db:           AsyncSession = Depends(get_db),
+):
+    log = AuditLog(
+        user_id = current_user.user_id,
+        action  = "logout",
+        detail  = {"username": current_user.username}
+    )
+    db.add(log)
+    await db.commit()
+
+    return {
+        "message": "Logged out successfully.",
+        "keycloak_logout_url": (
+            f"{KEYCLOAK_URL}/realms/{KEYCLOAK_REALM}"
+            f"/protocol/openid-connect/logout"
+        )
+    }
+
