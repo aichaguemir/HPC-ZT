@@ -40,6 +40,8 @@ async def create_keycloak_user(
             json={
                 "username":      username,
                 "email":         email,
+                "firstName":     username,   # ← ADD THIS
+                "lastName":      "User",     # ← ADD THIS  
                 "enabled":       enabled,
                 "emailVerified": True,
                 "credentials":   [{"type": "password", "value": password, "temporary": False}],
