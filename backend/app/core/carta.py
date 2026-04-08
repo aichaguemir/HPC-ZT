@@ -253,22 +253,30 @@ async def collect_signals(
 
     # ── R2: Location Anomaly (verified IP registry) ────────────────────────
     known = await is_known_ip(user.user_id, ip, db)
+
     if not known:
-        verified_ips_result = await db.execute(
+    # Count how many verified IPs this user has
+        verified_count_result = await db.execute(
             select(func.count(UserKnownIP.id))
             .where(UserKnownIP.user_id  == user.user_id)
             .where(UserKnownIP.verified == True)
         )
-        has_known_ips = verified_ips_result.scalar() > 0
+        has_known_ips = verified_count_result.scalar() > 0
         signals["R2_location"] = WEIGHTS["R2_location"] if has_known_ips else WEIGHTS["R2_location"] // 2
+
+    # Register as UNVERIFIED — becomes verified only after MFA
         await register_ip(user.user_id, ip, db, verified=False)
     else:
         signals["R2_location"] = 0
+    # Update last_seen silently
         await register_ip(user.user_id, ip, db, verified=True)
 
     # ── R4: Temporal Anomaly ───────────────────────────────────────────────
-    signals["R4_temporal"] = WEIGHTS["R4_temporal"] if (now.hour < 6 or now.hour >= 22) else 0
-
+    #signals["R4_temporal"] = WEIGHTS["R4_temporal"] if (now.hour < 6 or now.hour >= 22) else 0
+    
+   
+    signals["R4_temporal"] = WEIGHTS["R4_temporal"] if True else 0  # always trigger
+    
     # ── R5: Rate Anomaly ───────────────────────────────────────────────────
     threshold = RATE_THRESHOLDS.get(user.role, 2)
     rate_result = await db.execute(
@@ -341,6 +349,7 @@ def compute_session_score(
     """
     # Step 1 — hybrid of peak and sustained behavior
     base_score = max(
+        current_request_score,
         max_recent_score,
         avg_recent_score * 1.5
     )

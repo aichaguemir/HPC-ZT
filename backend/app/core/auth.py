@@ -146,7 +146,7 @@ async def get_current_user(
             user_id  = user.user_id,
             ip       = request.client.host,
             db       = db,
-            verified = True,
+            verified = False,
         )     
 
     return user
