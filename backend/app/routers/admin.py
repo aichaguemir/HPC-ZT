@@ -10,6 +10,7 @@ from app.core.keycloak_admin import (
     assign_keycloak_role, remove_keycloak_role,
     delete_keycloak_user, disable_keycloak_user
 )
+from app.core.carta import get_known_ips
 from app.db.session import get_db
 from app.db.models import User, AuditLog
 from app.services.ssh import run_ssh_async
@@ -376,5 +377,43 @@ async def change_role(
  
     logger.info(f"Role: {user.username} {old_role}→{body.new_role} by {current_user.username}")
     return {"message": f"Role changed from {old_role} to {body.new_role}"}
+    
+
+
+@router.get("/users/{user_id}/ips")
+async def get_user_ips(
+    user_id:      str,
+    db:           AsyncSession = Depends(get_db),
+    current_user: User         = Depends(require_admin),
+):
+    ips = await get_known_ips(user_id, db)
+    return {"user_id": user_id, "known_ips": ips}
+    
+    
+@router.get("/users/{user_id}/ips")
+async def get_user_ips(
+    user_id:      str,
+    db:           AsyncSession = Depends(get_db),
+    current_user: User         = Depends(require_admin),
+):
+    from app.db.models import UserKnownIP
+    result = await db.execute(
+        select(UserKnownIP)
+        .where(UserKnownIP.user_id == user_id)
+        .order_by(UserKnownIP.last_seen.desc())
+    )
+    ips = result.scalars().all()
+    return {
+        "ips": [
+            {
+                "ip":         i.ip_address,
+                "verified":   i.verified,
+                "first_seen": str(i.first_seen),
+                "last_seen":  str(i.last_seen),
+            }
+            for i in ips
+        ]
+    }    
+    
  
 

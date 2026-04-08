@@ -2,7 +2,7 @@ import httpx
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Request
 from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
 from jose.exceptions import ExpiredSignatureError
@@ -13,6 +13,9 @@ from app.core.config import KEYCLOAK_URL, KEYCLOAK_REALM
 from app.db.session import get_db
 from app.db.models import User, AuditLog
 from app.core.logging import logger
+from app.core.carta import get_or_create_session, register_ip
+
+
 
 # ── OAuth2 scheme ──────────────────────────────────────────────────────────
 oauth2_scheme = OAuth2PasswordBearer(
@@ -53,8 +56,9 @@ def extract_role(payload: dict) -> str:
 # ── Main dependency ────────────────────────────────────────────────────────
 
 async def get_current_user(
-    token: str          = Depends(oauth2_scheme),
-    db:    AsyncSession = Depends(get_db)
+    request: Request,
+    token: str = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db),
 ) -> User:
 
     credentials_exception = HTTPException(
@@ -134,8 +138,27 @@ async def get_current_user(
         raise HTTPException(403,
             "Account pending admin approval. "
             "Please wait for an administrator to approve your registration.")
+            
+            
+    # Register IP on every authenticated request
+    if request and request.client:
+        await register_ip(
+            user_id  = user.user_id,
+            ip       = request.client.host,
+            db       = db,
+            verified = True,
+        )     
 
     return user
+
+
+async def get_current_user_and_token(
+    request: Request,
+    token: str = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db),
+):
+    user = await get_current_user(request, token, db)
+    return user, token  # <-- tuple
 
 
 # ── Admin-only dependency ──────────────────────────────────────────────────
