@@ -21,6 +21,10 @@ from app.schemas.jobs import (
 from app.validators.script import validate_script
 from app.services.ssh import run_ssh_async, transfer_files
 from app.services.lsf import generate_lsf, generate_sandbox_wrapper
+from app.core.carta import run_carta, apply_carta_result, get_or_create_session
+from app.core.auth import oauth2_scheme,get_current_user_and_token 
+
+
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -95,8 +99,9 @@ async def submit_job(
     wall_time_minutes: int          = Form(...),
     request:           Request      = None,
     db:                AsyncSession = Depends(get_db),
-    current_user:      User         = Depends(get_current_user),
-):
+    current_user_and_token          = Depends(get_current_user_and_token),
+):   
+    current_user, token = current_user_and_token
     # ① Read and validate file
     content = await file.read()
     validate_script(file, content)
@@ -166,6 +171,36 @@ async def submit_job(
     )
     db.add(pending_job)
     await db.flush()
+    
+    session = await get_or_create_session(current_user, token, request, db)
+    carta_result = await run_carta(
+        job     = pending_job,
+        user    = current_user,
+        policy  = policy,
+        db      = db,
+        request = request,
+        session = session,
+    )
+    await apply_carta_result(pending_job, carta_result, db)           
+    
+    if carta_result["action"]["action"] == "block":
+       await db.delete(pending_job)
+       await db.commit()
+       raise HTTPException(403, detail={
+           "message": "Job blocked by risk engine",
+           "risk_score": carta_result["session_score"],
+           "signals": carta_result["signals"],
+       })
+
+    if carta_result["action"]["action"] == "flag_and_mfa":
+    # Return 202 — client must complete TOTP before resubmitting
+       raise HTTPException(202, detail={
+           "status": "mfa_required",
+           "risk_score": carta_result["session_score"],
+           "signals": carta_result["signals"],
+           "message": "Step-up authentication required",
+       })
+
 
     # ⑧ Write files, transfer, submit
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -215,15 +250,10 @@ async def submit_job(
                 }
             )
             db.add(log)
-            await db.commit()
-
-            # ⑪ Anomaly detection
-            await check_anomalies(pending_job, current_user, policy, db, request)
-
-            logger.info(
-                f"Job submitted: job_id={job_id}, user={current_user.username}, "
-                f"cores={params.cores}, memory={params.memory}, queue={params.queue}"
-            )
+            await db.commit() 
+            
+            
+            
 
             return JobResponse(
                 job_id          = job_id,

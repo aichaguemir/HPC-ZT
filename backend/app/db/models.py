@@ -1,7 +1,7 @@
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy import String, Integer, Boolean, DateTime, ForeignKey, text
 from sqlalchemy.dialects.postgresql import UUID, JSONB, ENUM as PG_ENUM
-from datetime import datetime
+from datetime import datetime,timezone
 import enum
 
 
@@ -205,6 +205,8 @@ class Session(Base):
     expires_at    : Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revoked_at    : Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     revoke_reason : Mapped[str]      = mapped_column(REVOKE_REASON_TYPE, nullable=True)
+    risk_score    : Mapped[int] = mapped_column(Integer, default=0)
+    peak_risk     : Mapped[int] = mapped_column(Integer, default=0)
 
     user = relationship("User", back_populates="sessions")
 
@@ -233,3 +235,20 @@ class AuditLog(Base):
 
     user = relationship("User", back_populates="logs")
     job  = relationship("Job",  back_populates="logs")
+    
+class UserKnownIP(Base):
+    __tablename__ = "user_known_ips"
+
+    id         : Mapped[str]      = mapped_column(
+                     UUID(as_uuid=False), primary_key=True,
+                     server_default=text("gen_random_uuid()"))
+    user_id    : Mapped[str]      = mapped_column(
+                     UUID(as_uuid=False),
+                     ForeignKey("users.user_id", ondelete="CASCADE"),
+                     nullable=False)
+    ip_address : Mapped[str]      = mapped_column(String(45), nullable=False)
+    first_seen : Mapped[datetime] = mapped_column(
+                     DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    last_seen  : Mapped[datetime] = mapped_column(
+                     DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    verified   : Mapped[bool]     = mapped_column(Boolean, default=False)    

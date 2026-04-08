@@ -28,17 +28,17 @@ def _safe_import(name, *args, **kwargs):
 _original_import  = _b.__import__
 _b.__import__     = _safe_import
 
-SAFE = {
+SAFE = {{
     'print', 'len', 'range', 'enumerate', 'zip',
     'map', 'filter', 'sorted', 'reversed', 'sum',
     'min', 'max', 'abs', 'round', 'int', 'float',
     'str', 'bool', 'list', 'dict', 'set', 'tuple',
-    'bytes', 'bytearray', 'memoryview',      # ← needed by import machinery
+    'bytes', 'bytearray', 'memoryview',
     'type', 'isinstance', 'issubclass', 'open',
     'hasattr', 'getattr', 'setattr',
-    'iter', 'next', 'callable', 'repr',      # ← needed by many libraries
+    'iter', 'next', 'callable', 'repr',
     'staticmethod', 'classmethod', 'property',
-    'super', 'object',                        # ← needed by classes
+    'super', 'object',
     'id', 'hash', 'hex', 'oct', 'bin',
     'chr', 'ord',
     'format', 'vars',
@@ -53,8 +53,8 @@ SAFE = {
     'Warning', 'UserWarning', 'DeprecationWarning',
     '__import__', '__name__', '__doc__',
     '__package__', '__spec__', '__loader__', '__builtins__',
-    '__build_class__',                        # ← needed for class definitions
-}
+    '__build_class__',
+}}
 
 _delattr = delattr
 _open    = open
