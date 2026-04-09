@@ -22,28 +22,27 @@ async def get_admin_token() -> str:
         response.raise_for_status()
         return response.json()["access_token"]
 
-
 async def create_keycloak_user(
-    username: str,
-    email:    str,
-    password: str,
-    enabled:  bool = True
+    username:   str,
+    email:      str,
+    password:   str,
+    first_name: str = "",
+    last_name:  str = "",
+    enabled:    bool = True
 ) -> str:
-    """Create a user in Keycloak. Returns the new user's Keycloak ID."""
     token = await get_admin_token()
 
     async with httpx.AsyncClient() as client:
-        # Create user
         response = await client.post(
             f"{KEYCLOAK_URL}/admin/realms/{KEYCLOAK_REALM}/users",
             headers={"Authorization": f"Bearer {token}"},
             json={
                 "username":      username,
                 "email":         email,
-                "firstName":     username,   # ← ADD THIS
-                "lastName":      "User",     # ← ADD THIS  
                 "enabled":       enabled,
                 "emailVerified": True,
+                "firstName":     first_name,
+                "lastName":      last_name,
                 "credentials":   [{"type": "password", "value": password, "temporary": False}],
             }
         )
@@ -51,13 +50,11 @@ async def create_keycloak_user(
             raise ValueError("Username or email already exists in Keycloak")
         response.raise_for_status()
 
-        # Get the created user's ID from Location header
-        location = response.headers.get("Location", "")
+        location    = response.headers.get("Location", "")
         keycloak_id = location.split("/")[-1]
 
         logger.info(f"Keycloak user created: {username} ({keycloak_id})")
         return keycloak_id
-
 
 async def assign_keycloak_role(keycloak_id: str, role_name: str) -> None:
     """Assign a realm role to a Keycloak user."""

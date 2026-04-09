@@ -229,7 +229,10 @@ class AuditLog(Base):
                      nullable=True)
     action     : Mapped[str]      = mapped_column(AUDIT_ACTION_TYPE, nullable=False)
     ip_address : Mapped[str]      = mapped_column(String, nullable=True)
-    detail     : Mapped[dict]     = mapped_column(JSONB, nullable=True)
+    detail     : Mapped[dict]     = mapped_column(JSONB, nullable=True) 
+    result     : Mapped[str]      = mapped_column(String, nullable=True)
+    chain_hash : Mapped[str]      = mapped_column(String, nullable=True)
+    prev_hash  : Mapped[str]      = mapped_column(String, nullable=True)
     timestamp  : Mapped[datetime] = mapped_column(DateTime(timezone=True),
                                         default=datetime.utcnow, nullable=False)
 

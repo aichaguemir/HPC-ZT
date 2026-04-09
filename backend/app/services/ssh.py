@@ -145,4 +145,50 @@ async def transfer_files(
         )
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
+        
+        
+def _transfer_files_sync(
+    local_script:  str,
+    local_lsf:     str,
+    local_sandbox: str,
+    unique_id:     str
+) -> None:
+    try:
+        ssh = get_ssh_client()
+        sftp = ssh.open_sftp()
 
+
+        try:
+            sftp.stat(REMOTE_JOB_DIR)
+        except (FileNotFoundError, IOError):
+             
+            parts = REMOTE_JOB_DIR.strip('/').split('/')
+            current = ''
+            for part in parts:
+                current += f'/{part}'
+                try:
+                    sftp.stat(current)
+                except (FileNotFoundError, IOError):
+                    try:
+                        sftp.mkdir(current)
+                    except OSError as e:
+                        if e.errno == 13: # Permission denied
+                            continue
+                        raise
+             
+        remote_base = REMOTE_JOB_DIR
+        if not remote_base.startswith('/'):
+            remote_base = f"/{remote_base}"
+
+         
+        remote_base = remote_base.rstrip('/')
+
+ 
+        sftp.put(local_script,  f"{remote_base}/script_{unique_id}.py")
+        sftp.put(local_lsf,     f"{remote_base}/job_{unique_id}.lsf")
+        sftp.put(local_sandbox, f"{remote_base}/sandbox_{unique_id}.py")
+        sftp.close()
+
+    except Exception as e:
+        logger.error(f"File transfer to HPC failed: {e}", exc_info=True)
+        raise RuntimeError(f"File transfer failed: {str(e)}")

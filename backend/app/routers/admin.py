@@ -5,20 +5,22 @@ from pydantic import BaseModel
 from datetime import datetime, timezone
 from typing import Optional
 
+import httpx
+
 from app.core.auth import get_current_user, require_admin
 from app.core.keycloak_admin import (
     assign_keycloak_role, remove_keycloak_role,
-    delete_keycloak_user, disable_keycloak_user
+    delete_keycloak_user, disable_keycloak_user,
+    get_admin_token,
 )
+from app.core.audit_chain import write_audit_entry, verify_chain
 from app.core.carta import get_known_ips
 from app.db.session import get_db
-from app.db.models import User, AuditLog
+from app.db.models import User, AuditLog, UserKnownIP
 from app.services.ssh import run_ssh_async
-from app.core.config import LSF_PATH
+from app.core.config import LSF_PATH, KEYCLOAK_URL, KEYCLOAK_REALM
 from app.core.logging import logger
-import httpx
-from app.core.config import KEYCLOAK_URL, KEYCLOAK_REALM
-from app.core.logging import logger
+
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
@@ -96,17 +98,17 @@ async def approve_user(
     if user.is_approved:
         raise HTTPException(400, "User already approved")
 
-    # Assign requested role in Keycloak
     role_to_assign = user.requested_role or "student"
     await assign_keycloak_role(user.keycloak_id, role_to_assign)
 
-    # Update DB
     user.is_approved = True
     user.role        = role_to_assign
 
-    log = AuditLog(
-        user_id    = current_user.user_id,
+    await write_audit_entry(
+        db         = db,
         action     = "role_change",
+        result     = "success",
+        user_id    = current_user.user_id,
         ip_address = request.client.host if request.client else None,
         detail     = {
             "target_user":  user.username,
@@ -115,7 +117,6 @@ async def approve_user(
             "approved_by":  current_user.username,
         }
     )
-    db.add(log)
     await db.commit()
 
     logger.info(f"User approved: {user.username} as {role_to_assign} by {current_user.username}")
@@ -136,13 +137,13 @@ async def reject_user(
     if user is None:
         raise HTTPException(404, "User not found")
 
-    # Delete from Keycloak
     await delete_keycloak_user(user.keycloak_id)
 
-    # Log before deleting
-    log = AuditLog(
-        user_id    = current_user.user_id,
+    await write_audit_entry(
+        db         = db,
         action     = "role_change",
+        result     = "success",
+        user_id    = current_user.user_id,
         ip_address = request.client.host if request.client else None,
         detail     = {
             "target_user": user.username,
@@ -150,9 +151,7 @@ async def reject_user(
             "rejected_by": current_user.username,
         }
     )
-    db.add(log)
 
-    # Delete from DB
     await db.delete(user)
     await db.commit()
 
@@ -176,15 +175,14 @@ async def deactivate_user(
     if user.user_id == current_user.user_id:
         raise HTTPException(400, "Cannot deactivate yourself")
 
-    # Disable in Keycloak
     await disable_keycloak_user(user.keycloak_id)
-
-    # Disable in DB
     user.is_active = False
 
-    log = AuditLog(
-        user_id    = current_user.user_id,
+    await write_audit_entry(
+        db         = db,
         action     = "role_change",
+        result     = "success",
+        user_id    = current_user.user_id,
         ip_address = request.client.host if request.client else None,
         detail     = {
             "target_user":    user.username,
@@ -192,44 +190,14 @@ async def deactivate_user(
             "deactivated_by": current_user.username,
         }
     )
-    db.add(log)
     await db.commit()
 
     logger.info(f"User deactivated: {user.username} by {current_user.username}")
     return {"message": f"User {user.username} deactivated"}
 
 
-# ── HPC Node status ────────────────────────────────────────────────────────
-
-@router.get("/nodes")
-async def get_nodes(
-    current_user: User = Depends(require_admin),
-):
-    result = await run_ssh_async(f"{LSF_PATH}/bhosts")
-    lines  = result.strip().splitlines()
-
-    if len(lines) < 2:
-        return {"nodes": []}
-
-    nodes = []
-    for line in lines[1:]:   # skip header
-        parts = line.split()
-        if len(parts) >= 6:
-            nodes.append({
-                "host":    parts[0],
-                "status":  parts[1],
-                "cpus":    parts[3],
-                "running": parts[4],
-                "max":     parts[5],
-            })
-
-    return {"nodes": nodes}
-    
-    
-
-
 # ── Reactivate user ────────────────────────────────────────────────────────
- 
+
 @router.post("/users/{user_id}/reactivate")
 async def reactivate_user(
     user_id:      str,
@@ -243,8 +211,7 @@ async def reactivate_user(
         raise HTTPException(404, "User not found")
     if user.is_active:
         raise HTTPException(400, "User is already active")
- 
-    # Re-enable in Keycloak
+
     token = await get_admin_token()
     async with httpx.AsyncClient() as client:
         response = await client.put(
@@ -253,13 +220,14 @@ async def reactivate_user(
             json={"enabled": True}
         )
         response.raise_for_status()
- 
-    # Re-enable in DB
+
     user.is_active = True
- 
-    log = AuditLog(
-        user_id    = current_user.user_id,
+
+    await write_audit_entry(
+        db         = db,
         action     = "role_change",
+        result     = "success",
+        user_id    = current_user.user_id,
         ip_address = request.client.host if request.client else None,
         detail     = {
             "target_user":    user.username,
@@ -267,15 +235,14 @@ async def reactivate_user(
             "reactivated_by": current_user.username,
         }
     )
-    db.add(log)
     await db.commit()
- 
+
     logger.info(f"User reactivated: {user.username} by {current_user.username}")
     return {"message": f"User {user.username} reactivated successfully"}
- 
- 
-# ── Revoke approval (back to pending) ─────────────────────────────────────
- 
+
+
+# ── Revoke approval ────────────────────────────────────────────────────────
+
 @router.post("/users/{user_id}/revoke")
 async def revoke_user(
     user_id:      str,
@@ -291,18 +258,18 @@ async def revoke_user(
         raise HTTPException(400, "Cannot revoke yourself")
     if not user.is_approved:
         raise HTTPException(400, "User is already pending")
- 
-    # Remove role from Keycloak
+
     if user.role in ("student", "researcher", "admin"):
         await remove_keycloak_role(user.keycloak_id, user.role)
- 
-    # Set back to pending in DB
+
     user.is_approved = False
-    user.role        = "student"  # minimum role
- 
-    log = AuditLog(
-        user_id    = current_user.user_id,
+    user.role        = "student"
+
+    await write_audit_entry(
+        db         = db,
         action     = "role_change",
+        result     = "success",
+        user_id    = current_user.user_id,
         ip_address = request.client.host if request.client else None,
         detail     = {
             "target_user": user.username,
@@ -310,16 +277,14 @@ async def revoke_user(
             "revoked_by":  current_user.username,
         }
     )
-    db.add(log)
     await db.commit()
- 
+
     logger.info(f"User revoked: {user.username} by {current_user.username}")
     return {"message": f"User {user.username} access revoked. Status set to pending."}
- 
- 
-# ── REPLACE your existing change_role with this version ───────────────────
-# (adds single-admin enforcement)
- 
+
+
+# ── Change role ────────────────────────────────────────────────────────────
+
 @router.put("/users/{user_id}/role")
 async def change_role(
     user_id:      str,
@@ -331,39 +296,34 @@ async def change_role(
     valid_roles = {"student", "researcher", "admin"}
     if body.new_role not in valid_roles:
         raise HTTPException(400, f"Invalid role. Choose: {', '.join(valid_roles)}")
- 
+
     result = await db.execute(select(User).where(User.user_id == user_id))
     user   = result.scalar_one_or_none()
     if user is None:
         raise HTTPException(404, "User not found")
- 
-    # ── Single admin enforcement ───────────────────────────────────────────
+
     if body.new_role == "admin":
-        existing_admin_result = await db.execute(
+        existing_admin = await db.execute(
             select(User)
             .where(User.role == "admin")
             .where(User.user_id != user_id)
         )
-        if existing_admin_result.scalar_one_or_none():
-            raise HTTPException(
-                400,
+        if existing_admin.scalar_one_or_none():
+            raise HTTPException(400,
                 "System already has an admin. "
-                "Revoke the existing admin's role first before assigning a new one."
-            )
- 
+                "Revoke existing admin first.")
+
     old_role = user.role
- 
-    # Remove old role, assign new in Keycloak
     if old_role in valid_roles:
         await remove_keycloak_role(user.keycloak_id, old_role)
     await assign_keycloak_role(user.keycloak_id, body.new_role)
- 
-    # Update DB
     user.role = body.new_role
- 
-    log = AuditLog(
-        user_id    = current_user.user_id,
+
+    await write_audit_entry(
+        db         = db,
         action     = "role_change",
+        result     = "success",
+        user_id    = current_user.user_id,
         ip_address = request.client.host if request.client else None,
         detail     = {
             "target_user": user.username,
@@ -372,13 +332,37 @@ async def change_role(
             "changed_by":  current_user.username,
         }
     )
-    db.add(log)
     await db.commit()
- 
+
     logger.info(f"Role: {user.username} {old_role}→{body.new_role} by {current_user.username}")
     return {"message": f"Role changed from {old_role} to {body.new_role}"}
-    
 
+
+# ── HPC Node status ────────────────────────────────────────────────────────
+
+@router.get("/nodes")
+async def get_nodes(
+    current_user: User = Depends(require_admin),
+):
+    result = await run_ssh_async(f"{LSF_PATH}/bhosts")
+    lines  = result.strip().splitlines()
+    if len(lines) < 2:
+        return {"nodes": []}
+    nodes = []
+    for line in lines[1:]:
+        parts = line.split()
+        if len(parts) >= 6:
+            nodes.append({
+                "host":    parts[0],
+                "status":  parts[1],
+                "cpus":    parts[3],
+                "running": parts[4],
+                "max":     parts[5],
+            })
+    return {"nodes": nodes}
+
+
+# ── User known IPs ─────────────────────────────────────────────────────────
 
 @router.get("/users/{user_id}/ips")
 async def get_user_ips(
@@ -386,17 +370,6 @@ async def get_user_ips(
     db:           AsyncSession = Depends(get_db),
     current_user: User         = Depends(require_admin),
 ):
-    ips = await get_known_ips(user_id, db)
-    return {"user_id": user_id, "known_ips": ips}
-    
-    
-@router.get("/users/{user_id}/ips")
-async def get_user_ips(
-    user_id:      str,
-    db:           AsyncSession = Depends(get_db),
-    current_user: User         = Depends(require_admin),
-):
-    from app.db.models import UserKnownIP
     result = await db.execute(
         select(UserKnownIP)
         .where(UserKnownIP.user_id == user_id)
@@ -413,7 +386,47 @@ async def get_user_ips(
             }
             for i in ips
         ]
-    }    
-    
- 
+    }
 
+
+# ── Audit chain verify ─────────────────────────────────────────────────────
+
+@router.get("/audit/verify")
+async def verify_audit_chain(
+    db:           AsyncSession = Depends(get_db),
+    current_user: User         = Depends(require_admin),
+):
+    return await verify_chain(db)
+
+
+# ── Audit logs ─────────────────────────────────────────────────────────────
+
+@router.get("/audit/logs")
+async def get_audit_logs(
+    limit:        int          = 50,
+    db:           AsyncSession = Depends(get_db),
+    current_user: User         = Depends(require_admin),
+):
+    result = await db.execute(
+        select(AuditLog)
+        .order_by(AuditLog.timestamp.desc())
+        .limit(limit)
+    )
+    logs = result.scalars().all()
+    return {
+        "logs": [
+            {
+                "log_id":     str(l.log_id),
+                "action":     l.action,
+                "result":     l.result,
+                "user_id":    str(l.user_id) if l.user_id else None,
+                "job_id":     l.job_id,
+                "ip_address": l.ip_address,
+                "detail":     l.detail,
+                "chain_hash": l.chain_hash[:16] + "..." if l.chain_hash else None,
+                "prev_hash":  l.prev_hash[:16] + "..." if l.prev_hash else None,
+                "timestamp":  str(l.timestamp),
+            }
+            for l in logs
+        ]
+    }
