@@ -153,6 +153,17 @@ async def mark_ip_verified(user_id: str, ip: str, db: AsyncSession) -> None:
     """Call after MFA success — marks IP as trusted."""
     await register_ip(user_id, ip, db, verified=True)
     logger.info(f"IP verified after MFA: user={user_id} ip={ip}")
+    
+
+
+async def get_known_ips(user_id: str, db: AsyncSession) -> list[str]:
+    """Get all verified IPs for a user."""
+    result = await db.execute(
+        select(UserKnownIP.ip_address)
+        .where(UserKnownIP.user_id  == user_id)
+        .where(UserKnownIP.verified == True)
+    )
+    return [row[0] for row in result.fetchall()]
 
 
 # ══════════════════════════════════════════════════════════════════════════
