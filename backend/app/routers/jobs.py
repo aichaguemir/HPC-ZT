@@ -107,7 +107,28 @@ async def submit_job(
     validate_script(file, content)
 
     # ② Load policy
-    policy = await get_policy(current_user, db)
+    policy = await get_policy(current_user, db) 
+    
+    RATE_LIMITS = {
+    "student":    5,
+    "researcher": 20,
+    "admin":      60,
+    }
+
+    rate_limit  = RATE_LIMITS.get(current_user.role, 5)
+    one_min_ago = datetime.now(timezone.utc) - timedelta(seconds=60)
+
+    recent_result = await db.execute(
+        select(func.count(Job.job_id))
+        .where(Job.user_id == current_user.user_id)
+        .where(Job.submitted_at >= one_min_ago)
+    )
+
+    if recent_result.scalar() >= rate_limit:
+       raise HTTPException(
+           429,
+           detail=f"Rate limit exceeded ({rate_limit}/min for {current_user.role})"
+    )
 
     # ③ Validate parameters against policy
     try:
