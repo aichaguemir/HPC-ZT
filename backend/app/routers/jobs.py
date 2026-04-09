@@ -2,7 +2,7 @@ import re
 import uuid
 import os
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,7 +23,9 @@ from app.services.ssh import run_ssh_async, transfer_files
 from app.services.lsf import generate_lsf, generate_sandbox_wrapper
 from app.core.carta import run_carta, apply_carta_result, get_or_create_session
 from app.core.auth import oauth2_scheme,get_current_user_and_token 
-
+from sqlalchemy import update
+from app.core.audit_chain import write_audit_entry
+from app.core.config import KEYCLOAK_URL, KEYCLOAK_REALM, KEYCLOAK_CLIENT_ID
 
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
@@ -40,55 +42,9 @@ async def get_policy(user: User, db: AsyncSession) -> Policy:
         raise HTTPException(503, "Policy not configured for your role. Contact admin.")
     return policy
 
-
-# ── Helper: anomaly detection ──────────────────────────────────────────────
-
-async def check_anomalies(job: Job, user: User, policy: Policy,
-                          db: AsyncSession, request: Request):
-    reasons = []
-    now = datetime.now(timezone.utc)
-
-    # Off-hours submission
-    if now.hour < 6 or now.hour >= 22:
-        reasons.append("off_hours")
-
-    # Rapid submissions (5+ jobs in last 10 minutes)
-    ten_min_ago = now.replace(minute=now.minute - 10) if now.minute >= 10 else now
-    recent_result = await db.execute(
-        select(func.count(Job.job_id))
-        .where(Job.user_id == user.user_id)
-        .where(Job.submitted_at >= ten_min_ago)
-    )
-    if recent_result.scalar() >= 5:
-        reasons.append("rapid_submission")
-
-    # Max resources requested
-    if job.cores == policy.max_cores_per_job and job.memory == policy.max_memory_mb:
-        reasons.append("max_resources_requested")
-
-    if reasons:
-        job.is_flagged  = True
-        job.flag_reason = ", ".join(reasons)
-        job.flagged_at  = now
-
-        log = AuditLog(
-            user_id    = user.user_id,
-            job_id     = job.job_id,
-            action     = "job_flagged",
-            ip_address = request.client.host if request and request.client else None,
-            detail     = {"reasons": reasons, "auto_detected": True}
-        )
-        db.add(log)
-        await db.commit()
-        logger.warning(
-            f"ANOMALY: job={job.job_id}, user={user.username}, reasons={reasons}"
-        )
-
-
 # ==============================
 # SUBMIT
 # ==============================
-
 @router.post("/submit", response_model=JobResponse)
 async def submit_job(
     file:              UploadFile   = File(...),
@@ -100,37 +56,27 @@ async def submit_job(
     request:           Request      = None,
     db:                AsyncSession = Depends(get_db),
     current_user_and_token          = Depends(get_current_user_and_token),
-):   
+):
     current_user, token = current_user_and_token
-    # ① Read and validate file
+ 
+    # ① Auto-expire stuck jobs first
+    await db.execute(
+        update(Job)
+        .where(Job.user_id == current_user.user_id)
+        .where(Job.status.in_(["PEND", "RUN"]))
+        .where(Job.submitted_at < datetime.now(timezone.utc) - timedelta(hours=2))
+        .values(status="EXIT", finished_at=datetime.now(timezone.utc))
+    )
+    await db.commit()
+ 
+    # ② Read and validate file
     content = await file.read()
     validate_script(file, content)
-
-    # ② Load policy
-    policy = await get_policy(current_user, db) 
-    
-    RATE_LIMITS = {
-    "student":    5,
-    "researcher": 20,
-    "admin":      60,
-    }
-
-    rate_limit  = RATE_LIMITS.get(current_user.role, 5)
-    one_min_ago = datetime.now(timezone.utc) - timedelta(seconds=60)
-
-    recent_result = await db.execute(
-        select(func.count(Job.job_id))
-        .where(Job.user_id == current_user.user_id)
-        .where(Job.submitted_at >= one_min_ago)
-    )
-
-    if recent_result.scalar() >= rate_limit:
-       raise HTTPException(
-           429,
-           detail=f"Rate limit exceeded ({rate_limit}/min for {current_user.role})"
-    )
-
-    # ③ Validate parameters against policy
+ 
+    # ③ Load policy
+    policy = await get_policy(current_user, db)
+ 
+    # ④ Validate parameters against policy
     try:
         params = JobSubmitParams(
             cores=cores, memory=memory, queue=queue,
@@ -140,15 +86,15 @@ async def submit_job(
         )
     except ValueError as e:
         raise HTTPException(400, detail=str(e))
-
-    # ④ Check queue allowed for role
+ 
+    # ⑤ Check queue allowed for role
     allowed_queues = {pq.queue_name for pq in policy.allowed_queues}
     if params.queue not in allowed_queues:
         raise HTTPException(400,
             detail=f"Queue '{params.queue}' not permitted. "
                    f"Allowed: {', '.join(allowed_queues)}")
-
-    # ⑤ Check concurrent job quota
+ 
+    # ⑥ Check concurrent job quota
     active_result = await db.execute(
         select(func.count(Job.job_id))
         .where(Job.user_id == current_user.user_id)
@@ -157,8 +103,8 @@ async def submit_job(
     if active_result.scalar() >= policy.max_concurrent_jobs:
         raise HTTPException(429,
             detail=f"Maximum {policy.max_concurrent_jobs} concurrent jobs for your role.")
-
-    # ⑥ Check daily quota
+ 
+    # ⑦ Check daily quota
     if policy.max_jobs_per_day:
         today_start = datetime.now(timezone.utc).replace(
             hour=0, minute=0, second=0, microsecond=0)
@@ -170,8 +116,22 @@ async def submit_job(
         if daily_result.scalar() >= policy.max_jobs_per_day:
             raise HTTPException(429,
                 detail=f"Daily job limit of {policy.max_jobs_per_day} reached.")
-
-    # ⑦ Insert pending job
+ 
+    # ⑧ Per-minute rate limit (role-aware, user-based)
+    RATE_LIMITS = {"student": 5, "researcher": 20, "admin": 60}
+    rate_limit  = RATE_LIMITS.get(current_user.role, 5)
+    one_min_ago = datetime.now(timezone.utc) - timedelta(seconds=60)
+    recent_result = await db.execute(
+        select(func.count(Job.job_id))
+        .where(Job.user_id     == current_user.user_id)
+        .where(Job.submitted_at >= one_min_ago)
+    )
+    if recent_result.scalar() >= rate_limit:
+        raise HTTPException(429,
+            detail=f"Rate limit exceeded. Max {rate_limit} submissions/minute "
+                   f"for {current_user.role} role.")
+ 
+    # ⑨ Insert pending job
     unique_id   = str(uuid.uuid4())
     pending_job = Job(
         job_id                     = f"pending_{unique_id}",
@@ -192,8 +152,9 @@ async def submit_job(
     )
     db.add(pending_job)
     await db.flush()
-    
-    session = await get_or_create_session(current_user, token, request, db)
+ 
+    # ⑩ CARTA risk evaluation
+    session      = await get_or_create_session(current_user, token, request, db)
     carta_result = await run_carta(
         job     = pending_job,
         user    = current_user,
@@ -202,80 +163,127 @@ async def submit_job(
         request = request,
         session = session,
     )
-    await apply_carta_result(pending_job, carta_result, db)           
-    
+    await apply_carta_result(pending_job, carta_result, db)
+ 
+    # ⑪ Block if critical risk
     if carta_result["action"]["action"] == "block":
-       await db.delete(pending_job)
-       await db.commit()
-       raise HTTPException(403, detail={
-           "message": "Job blocked by risk engine",
-           "risk_score": carta_result["session_score"],
-           "signals": carta_result["signals"],
-       })
-
+        await db.delete(pending_job)
+        await db.commit()
+        await write_audit_entry(
+            db         = db,
+            action     = "job_submit",
+            result     = "blocked",
+            user_id    = current_user.user_id,
+            ip_address = request.client.host if request and request.client else None,
+            detail     = {
+                "reason":      "critical_risk",
+                "carta_score": carta_result["session_score"],
+                "signals":     carta_result["signals"],
+            }
+        )
+        await db.commit()
+        raise HTTPException(403, detail={
+            "message":    "Job blocked — risk score too high",
+            "risk_score": carta_result["session_score"],
+            "signals":    carta_result["signals"],
+        })
+ 
+    # ⑫ MFA required if high risk
     if carta_result["action"]["action"] == "flag_and_mfa":
-    # Return 202 — client must complete TOTP before resubmitting
-       raise HTTPException(202, detail={
-           "status": "mfa_required",
-           "risk_score": carta_result["session_score"],
-           "signals": carta_result["signals"],
-           "message": "Step-up authentication required",
-       })
-
-
-    # ⑧ Write files, transfer, submit
+        await db.delete(pending_job)
+        await db.commit()
+        await write_audit_entry(
+            db         = db,
+            action     = "job_submit",
+            result     = "mfa_required",
+            user_id    = current_user.user_id,
+            ip_address = request.client.host if request and request.client else None,
+            detail     = {
+                "reason":      "high_risk",
+                "carta_score": carta_result["session_score"],
+                "signals":     carta_result["signals"],
+            }
+        )
+        await db.commit()
+        raise HTTPException(403, detail={
+            "status":     "mfa_required",
+            "risk_score": carta_result["session_score"],
+            "signals":    carta_result["signals"],
+            "message":    "Step-up authentication required. Complete MFA and resubmit.",
+            "reauth_url": (
+                f"{KEYCLOAK_URL}/realms/{KEYCLOAK_REALM}"
+                f"/protocol/openid-connect/auth"
+                f"?client_id={KEYCLOAK_CLIENT_ID}"
+                f"&response_type=code&scope=openid&acr_values=gold"
+            )
+        })
+ 
+    # ⑬ Write files, transfer, submit to LSF
     with tempfile.TemporaryDirectory() as tmpdir:
         local_script  = os.path.join(tmpdir, f"script_{unique_id}.py")
         local_lsf     = os.path.join(tmpdir, f"job_{unique_id}.lsf")
         local_sandbox = os.path.join(tmpdir, f"sandbox_{unique_id}.py")
-
+ 
         try:
             with open(local_script, "wb") as f:
                 f.write(content)
-
+ 
             with open(local_sandbox, "w") as f:
                 f.write(generate_sandbox_wrapper(unique_id))
-
+ 
             with open(local_lsf, "w") as f:
                 f.write(generate_lsf(
                     unique_id, current_user.username,
                     params.cores, params.memory, params.queue,
                     params.wall_time_hours, params.wall_time_minutes,
                 ))
-
+ 
             await transfer_files(local_script, local_lsf, local_sandbox, unique_id)
-
+ 
+            safe_path = REMOTE_JOB_DIR if REMOTE_JOB_DIR.startswith('/') else f"/{REMOTE_JOB_DIR}"
+            safe_path = safe_path.rstrip('/')
+ 
             result = await run_ssh_async(
-                f"{LSF_PATH}/bsub < {REMOTE_JOB_DIR}/job_{unique_id}.lsf"
+                f"{LSF_PATH}/bsub < {safe_path}/job_{unique_id}.lsf"
             )
-
+ 
             match = re.search(r"Job <(\d+)>", result)
             if not match:
                 raise HTTPException(500, detail=f"Job submission failed: {result}")
-
+ 
             job_id = match.group(1)
-
-            # ⑨ Update DB with real job ID
+ 
+            # Update DB with real LSF job ID
             pending_job.job_id = job_id
             await db.commit()
-
-            # ⑩ Audit log
-            log = AuditLog(
+ 
+            # ⑭ Audit chain entry
+            await write_audit_entry(
+                db         = db,
+                action     = "job_submit",
+                result     = "success",
                 user_id    = current_user.user_id,
                 job_id     = job_id,
-                action     = "job_submit",
                 ip_address = request.client.host if request and request.client else None,
                 detail     = {
-                    "cores": params.cores, "memory": params.memory,
-                    "queue": params.queue, "script": file.filename,
+                    "cores":         params.cores,
+                    "memory":        params.memory,
+                    "queue":         params.queue,
+                    "script":        file.filename,
+                    "carta_score":   carta_result["session_score"],
+                    "carta_signals": carta_result["signals"],
+                    "carta_level":   carta_result["level"],
                 }
             )
-            db.add(log)
-            await db.commit() 
-            
-            
-            
-
+            await db.commit()
+ 
+            logger.info(
+                f"Job submitted: job_id={job_id} "
+                f"user={current_user.username} "
+                f"cores={params.cores} queue={params.queue} "
+                f"carta_score={carta_result['session_score']}"
+            )
+ 
             return JobResponse(
                 job_id          = job_id,
                 status          = JobStatus.PEND.value,
@@ -287,12 +295,11 @@ async def submit_job(
                 memory          = params.memory,
                 queue           = params.queue,
             )
-
+ 
         except Exception:
             await db.delete(pending_job)
             await db.commit()
             raise
-
 
 # ==============================
 # STATUS
