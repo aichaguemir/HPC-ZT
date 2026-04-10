@@ -13,6 +13,8 @@ from app.db.models import Base, Policy, PolicyQueue, Job
 from app.services.ssh import run_ssh_async
 from app.core.config import LSF_PATH
 from app.core.logging import logger
+from fastapi.middleware.cors import CORSMiddleware
+
 
 
 # ══════════════════════════════════════════════════════════════
@@ -204,6 +206,7 @@ async def lifespan(app: FastAPI):
     except asyncio.CancelledError:
         logger.info("Background task stopped")
 
+ 
 
 # ══════════════════════════════════════════════════════════════
 # APP
@@ -214,7 +217,17 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
-
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://192.168.1.104:3000",  # her machine IP if different
+    ],
+    allow_credentials = True,
+    allow_methods     = ["*"],
+    allow_headers     = ["*"],
+) 
 app.include_router(jobs.router, prefix="/api/v1")
 app.include_router(auth_router.router, prefix="/api/v1")
 app.include_router(admin_router.router, prefix="/api/v1")
