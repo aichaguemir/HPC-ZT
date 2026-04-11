@@ -1,100 +1,109 @@
 import React, { useEffect, useState } from "react";
+import axios from "axios";
+import { getToken } from "../../store/auth"; 
 import "./NodeMap.css";
 
 export default function NodeMap() {
   const [nodes, setNodes] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  // Fake data (من الصورة)
+  
+  const fetchNodes = async () => {
+    try {
+      const token = getToken();
+      const res = await axios.get("http://localhost:8000/api/v1/admin/nodes", {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+  
+      setNodes(res.data.nodes || []);
+    } catch (err) {
+      console.error("Error fetching nodes:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const data = [
-      { name: "compute000", status: "unavail", maxCores: 1, njobs: 0 },
-    { name: "compute001", status: "ok", maxCores: 16, njobs: 0 },
-    { name: "compute002", status: "ok", maxCores: 16, njobs: 0 },
-    { name: "compute003", status: "ok", maxCores: 16, njobs: 0 },
-    { name: "compute004", status: "ok", maxCores: 16, njobs: 0 },
-    { name: "compute005", status: "ok", maxCores: 16, njobs: 0 },
-    { name: "compute006", status: "ok", maxCores: 16, njobs: 0 },
-    { name: "compute007", status: "unavail", maxCores: 1, njobs: 0 },
-    { name: "compute008", status: "unavail", maxCores: 1, njobs: 0 },
-    { name: "compute009", status: "ok", maxCores: 16, njobs: 0 },
-    { name: "compute010", status: "ok", maxCores: 16, njobs: 0 },
-    { name: "compute011", status: "ok", maxCores: 16, njobs: 0 },
-    { name: "compute012", status: "ok", maxCores: 16, njobs: 0 },
-    { name: "compute013", status: "ok", maxCores: 16, njobs: 0 },
-    { name: "compute014", status: "unavail", maxCores: 1, njobs: 0 },
-    { name: "compute015", status: "unavail", maxCores: 1, njobs: 0 },
-    { name: "compute016", status: "unavail", maxCores: 1, njobs: 0 },
-    { name: "compute017", status: "ok", maxCores: 16, njobs: 0 },
-    { name: "compute018", status: "ok", maxCores: 16, njobs: 0 },
-    { name: "compute019", status: "ok", maxCores: 16, njobs: 0 },
-    { name: "compute020", status: "ok", maxCores: 16, njobs: 0 },
-    { name: "compute021", status: "ok", maxCores: 16, njobs: 0 },
-    { name: "compute022", status: "unavail", maxCores: 1, njobs: 0 },
-    { name: "compute023", status: "ok", maxCores: 16, njobs: 0 },
-    { name: "compute024", status: "ok", maxCores: 16, njobs: 0 },
-    { name: "compute025", status: "unavail", maxCores: 1, njobs: 0 },
-    { name: "compute026", status: "unavail", maxCores: 1, njobs: 0 },
-    { name: "compute027", status: "unavail", maxCores: 1, njobs: 0 },
-    { name: "compute028", status: "ok", maxCores: 16, njobs: 0 },
-    { name: "compute029", status: "unavail", maxCores: 1, njobs: 0 },
-    { name: "compute030", status: "ok", maxCores: 16, njobs: 0 },
-    { name: "hpcadmin1", status: "ok", maxCores: 16, njobs: 0 },
-    { name: "hpcadmin2", status: "ok", maxCores: 16, njobs: 0 }
-    ];
-
-    setNodes(data);
+    fetchNodes();
+   
+    const interval = setInterval(fetchNodes, 30000);
+    return () => clearInterval(interval);
   }, []);
+
+  
+  const totalNodes = nodes.length;
+  const activeNodes = nodes.filter(n => n.status === "ok").length;
+  const totalCores = nodes.reduce((sum, n) => sum + parseInt(n.max || 0), 0);
+  const totalRunningJobs = nodes.reduce((sum, n) => sum + parseInt(n.running || 0), 0);
+
+  if (loading) return <div className="loading-state">Scanning HPC Cluster...</div>;
 
   return (
     <div className="node-map-container">
-
       <h1>HPC Cluster Overview</h1>
 
-      {/* ===== STATS ===== */}
+      {/* ===== STATS (Dynamic Now!) ===== */}
       <div className="grid">
-
         <div className="card">
           <div className="label">Compute Nodes</div>
-          <div className="metric-big">22 / 33</div>
+          <div className="metric-big">{activeNodes} / {totalNodes}</div>
+          <div className="sub-label">Nodes Online</div>
         </div>
 
         <div className="card">
           <div className="label">Total Cores</div>
-          <div className="metric-big">352</div>
+          <div className="metric-big">{totalCores}</div>
+          <div className="sub-label">Available Across Cluster</div>
         </div>
 
         <div className="card">
-          <div className="label">RAM per Node</div>
-          <div className="metric-big">18 GB</div>
+          <div className="label">Active Jobs</div>
+          <div className="metric-big">{totalRunningJobs}</div>
+          <div className="sub-label">Currently Running</div>
         </div>
 
         <div className="card">
-          <div className="label">Network</div>
-          <div className="metric-big">Gigabit</div>
+          <div className="label">Resource Utilization</div>
+          <div className="metric-big">
+            {totalCores > 0 ? ((totalRunningJobs / totalCores) * 100).toFixed(1) : 0}%
+          </div>
+          <div className="sub-label">Core Usage Rate</div>
         </div>
-
       </div>
 
       {/* ===== NODE GRID ===== */}
       <div className="node-grid">
         {nodes.map((node) => (
           <div
-            key={node.name}
-            className={`node-tile ${node.status}`}
-            title={`Name: ${node.name} | Status: ${node.status} | Cores: ${node.maxCores} | Jobs: ${node.njobs}`}
+            key={node.host}
+            className={`node-tile ${node.status === "ok" ? "ok" : "unavail"}`}
           >
-            <strong>{node.name}</strong>
+            <strong>{node.host}</strong>
 
-            <p style={{color: node.status === "ok" ? "var(--success)" : "var(--danger)"}}>
-              ● {node.status}
-            </p>
+            <div className="status-indicator">
+              <span className={`dot ${node.status === "ok" ? "bg-success" : "bg-danger"}`}></span>
+              <span style={{ color: node.status === "ok" ? "var(--success)" : "var(--danger)" }}>
+                {node.status}
+              </span>
+            </div>
 
-            <p>Cores: {node.maxCores}</p>
-            <p>Jobs: {node.njobs}</p>
+            <div className="node-details">
+              <p>Cores: {node.max}</p>
+              <p>Running: {node.running}</p>
+            </div>
+            
+            {/* ProgressBar بسيط يوضح استهلاك الـ Cores في كل Node */}
+            <div className="usage-bar-bg">
+              <div 
+                className="usage-bar-fill" 
+                style={{ width: `${(node.running / node.max) * 100}%` }}
+              ></div>
+            </div>
           </div>
         ))}
       </div>
-
     </div>
   );
 }
+
