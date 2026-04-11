@@ -353,12 +353,14 @@ async def get_nodes(
         parts = line.split()
         if len(parts) >= 6:
             nodes.append({
-                "host":    parts[0],
-                "status":  parts[1],
-                "cpus":    parts[3],
-                "running": parts[4],
-                "max":     parts[5],
-            })
+                "host":        parts[0],
+                "status":      parts[1],
+                "max_cpus":    parts[3],   # MAX
+                "running_jobs": parts[5],  # RUN
+                "total_jobs":  parts[4],   # NJOBS (includes suspended)
+                "utilization": f"{int(parts[5])/int(parts[3])*100:.0f}%" 
+                               if parts[3] != "0" else "0%"
+})
     return {"nodes": nodes}
 
 
@@ -408,25 +410,26 @@ async def get_audit_logs(
     current_user: User         = Depends(require_admin),
 ):
     result = await db.execute(
-        select(AuditLog)
+        select(AuditLog, User.username)
+        .outerjoin(User, AuditLog.user_id == User.user_id)
         .order_by(AuditLog.timestamp.desc())
         .limit(limit)
     )
-    logs = result.scalars().all()
+    rows = result.all()
     return {
         "logs": [
             {
                 "log_id":     str(l.log_id),
                 "action":     l.action,
                 "result":     l.result,
+                "username":   username or "deleted_user",  # ← name not ID
                 "user_id":    str(l.user_id) if l.user_id else None,
                 "job_id":     l.job_id,
                 "ip_address": l.ip_address,
                 "detail":     l.detail,
                 "chain_hash": l.chain_hash[:16] + "..." if l.chain_hash else None,
-                "prev_hash":  l.prev_hash[:16] + "..." if l.prev_hash else None,
                 "timestamp":  str(l.timestamp),
             }
-            for l in logs
+            for l, username in rows
         ]
     }

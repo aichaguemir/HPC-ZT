@@ -93,10 +93,10 @@ async def get_cluster_utilization() -> float:
             running = 0
             for line in lines[1:]:
                 parts = line.split()
-                if len(parts) >= 5:
+                if len(parts) >= 6:
                     try:
-                        total   += int(parts[3])
-                        running += int(parts[4])
+                        total   += int(parts[3])   # MAX — total slots
+                        running += int(parts[5])  
                     except (ValueError, IndexError):
                         continue
             _cluster_cache["value"]   = (running / total * 100) if total > 0 else 0.0
