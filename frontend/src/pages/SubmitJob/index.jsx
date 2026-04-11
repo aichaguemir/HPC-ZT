@@ -13,6 +13,18 @@ export default function SubmitJob() {
   const [loading, setLoading] = useState(false);
   const [serverError, setServerError] = useState(""); 
 
+
+  const memoryOptions = [
+    { value: 100, label: "100 MB (Minimum)" },
+    { value: 512, label: "512 MB (Small Job)" },
+    { value: 1024, label: "1024 MB (1 GB)" },
+    { value: 2048, label: "2048 MB (2 GB)" },
+    { value: 4096, label: "4096 MB (Max for Student)" },
+    { value: 8192, label: "8192 MB (Researcher Only)" },
+    { value: 16000, label: "16000 MB (Researcher Only)" },
+    { value: 31900, label: "31900 MB (Admin/Researcher Max)" },
+  ];
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setServerError(""); 
@@ -56,7 +68,6 @@ export default function SubmitJob() {
 
       <form className="card" onSubmit={handleSubmit}>
         
-     
         {serverError && (
           <div style={{ 
             backgroundColor: "#fff5f5", 
@@ -95,12 +106,25 @@ export default function SubmitJob() {
 
         <hr style={{ margin: "20px 0", border: "0.5px solid #eee" }} />
 
-        {/* Resources */}
-        <label className="label">CPU Cores</label>
-        <input type="number" min="1" value={cores} onChange={(e) => setCores(e.target.value)} />
+        {/* CPU Cores - Range from 1 to 16 */}
+        <label className="label">CPU Cores (1 - 16)</label>
+        <input 
+          type="number" 
+          min="1" 
+          max="16" 
+          value={cores} 
+          onChange={(e) => setCores(e.target.value)} 
+        />
 
-        <label className="label">Memory (MB)</label>
-        <input type="number" min="512" value={memory} onChange={(e) => setMemory(e.target.value)} />
+        {/* Memory - Converted to Select Dropdown */}
+        <label className="label">Memory (RAM)</label>
+        <select value={memory} onChange={(e) => setMemory(e.target.value)}>
+          {memoryOptions.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
 
         <label className="label">Queue (Priority)</label>
         <select value={queue} onChange={(e) => setQueue(e.target.value)}>
@@ -109,7 +133,7 @@ export default function SubmitJob() {
           <option value="high_priority">High Priority</option>
         </select>
 
-        {/* Execution Time separated */}
+        {/* Execution Time */}
         <div style={{ marginTop: "15px" }}>
           <label className="label">Wall Time: Hours</label>
           <input 

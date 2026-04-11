@@ -1,104 +1,142 @@
 import React, { useEffect, useState } from "react";
-import axios from "axios";
-import { getToken } from "../../store/auth"; 
+import api from "../../store/api"; // Unified API instance with Silent Refresh
 import "./NodeMap.css";
 
+/**
+ * NodeMap Component
+ * Visualizes the HPC cluster infrastructure.
+ * Corrects core counting by only summing Online nodes.
+ */
 export default function NodeMap() {
   const [nodes, setNodes] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  
-  const fetchNodes = async () => {
+  /**
+   * Fetches cluster node data from the backend.
+   * @param {boolean} isManual - Controls the manual refresh spinner.
+   */
+  const fetchNodes = async (isManual = false) => {
     try {
-      const token = getToken();
-      const res = await axios.get("http://localhost:8000/api/v1/admin/nodes", {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      if (isManual) setRefreshing(true);
       
-  
-      setNodes(res.data.nodes || []);
+      const res = await api.get("/admin/nodes");
+      // Safety: always ensure we have an array
+      const nodesData = res.data.nodes || [];
+      setNodes(nodesData);
     } catch (err) {
-      console.error("Error fetching nodes:", err);
+      console.error("Cluster Monitoring Error:", err);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
+  // Initial load and auto-refresh every 30 seconds
   useEffect(() => {
     fetchNodes();
-   
-    const interval = setInterval(fetchNodes, 30000);
+    const interval = setInterval(() => fetchNodes(false), 30000);
     return () => clearInterval(interval);
   }, []);
 
+  // --- Logic for Cluster Metrics (Excluding Offline Nodes) ---
   
-  const totalNodes = nodes.length;
-  const activeNodes = nodes.filter(n => n.status === "ok").length;
-  const totalCores = nodes.reduce((sum, n) => sum + parseInt(n.max || 0), 0);
-  const totalRunningJobs = nodes.reduce((sum, n) => sum + parseInt(n.running || 0), 0);
+  // 1. All nodes count
+  const totalNodesCount = nodes.length;
 
-  if (loading) return <div className="loading-state">Scanning HPC Cluster...</div>;
+  // 2. Filter for Online nodes only (status === "ok")
+  const onlineNodesList = nodes.filter(n => n.status === "ok");
+  const activeNodesCount = onlineNodesList.length;
+
+  // 3. Total Cores calculation (Summing only Online nodes to reach 368)
+  const totalCores = onlineNodesList.reduce((sum, n) => sum + parseInt(n.max_cpus || 0), 0);
+
+  // 4. Active workload
+  const totalRunningJobs = onlineNodesList.reduce((sum, n) => sum + parseInt(n.running_jobs || 0), 0);
+
+  // 5. Overall Cluster Utilization
+  const clusterUtilization = totalCores > 0 ? ((totalRunningJobs / totalCores) * 100).toFixed(1) : 0;
+
+  if (loading) return <div className="loading-state">Scanning HPC Cluster Nodes...</div>;
 
   return (
     <div className="node-map-container">
-      <h1>HPC Cluster Overview</h1>
+      {/* Header Section */}
+      <div className="header-actions" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+        <div>
+          <h1>HPC Cluster Overview</h1>
+          <p className="subtext">Live monitoring of compute infrastructure</p>
+        </div>
+        <button 
+          onClick={() => fetchNodes(true)} 
+          className={`btn-refresh-pro ${refreshing ? "spinning" : ""}`}
+          disabled={refreshing}
+        >
+          {refreshing ? "Synchronizing..." : "Refresh Status"}
+        </button>
+      </div>
 
-      {/* ===== STATS (Dynamic Now!) ===== */}
+      {/* Statistics Cards Grid */}
       <div className="grid">
         <div className="card">
           <div className="label">Compute Nodes</div>
-          <div className="metric-big">{activeNodes} / {totalNodes}</div>
+          <div className="metric-big">{activeNodesCount} / {totalNodesCount}</div>
           <div className="sub-label">Nodes Online</div>
         </div>
-
+        
         <div className="card">
           <div className="label">Total Cores</div>
           <div className="metric-big">{totalCores}</div>
-          <div className="sub-label">Available Across Cluster</div>
+          <div className="sub-label">Available Capacity</div>
         </div>
-
+        
         <div className="card">
           <div className="label">Active Jobs</div>
           <div className="metric-big">{totalRunningJobs}</div>
-          <div className="sub-label">Currently Running</div>
+          <div className="sub-label">Workload Threads</div>
         </div>
-
+        
         <div className="card">
-          <div className="label">Resource Utilization</div>
-          <div className="metric-big">
-            {totalCores > 0 ? ((totalRunningJobs / totalCores) * 100).toFixed(1) : 0}%
-          </div>
-          <div className="sub-label">Core Usage Rate</div>
+          <div className="label">Utilization</div>
+          <div className="metric-big">{clusterUtilization}%</div>
+          <div className="sub-label">Current Usage Rate</div>
         </div>
       </div>
 
-      {/* ===== NODE GRID ===== */}
+      {/* Individual Node Tiles */}
       <div className="node-grid">
         {nodes.map((node) => (
-          <div
-            key={node.host}
-            className={`node-tile ${node.status === "ok" ? "ok" : "unavail"}`}
-          >
-            <strong>{node.host}</strong>
-
-            <div className="status-indicator">
-              <span className={`dot ${node.status === "ok" ? "bg-success" : "bg-danger"}`}></span>
-              <span style={{ color: node.status === "ok" ? "var(--success)" : "var(--danger)" }}>
-                {node.status}
-              </span>
-            </div>
-
-            <div className="node-details">
-              <p>Cores: {node.max}</p>
-              <p>Running: {node.running}</p>
+          <div key={node.host} className={`node-tile ${node.status === "ok" ? "ok" : "unavail"}`}>
+            <div className="node-header">
+              <strong>{node.host}</strong>
+              <div className="status-indicator">
+                <span className={`dot ${node.status === "ok" ? "bg-success" : "bg-danger"}`}></span>
+                <span className={node.status === "ok" ? "text-success" : "text-danger"}>
+                  {node.status === "ok" ? "Online" : "Unavailable"}
+                </span>
+              </div>
             </div>
             
-            {/* ProgressBar بسيط يوضح استهلاك الـ Cores في كل Node */}
-            <div className="usage-bar-bg">
-              <div 
-                className="usage-bar-fill" 
-                style={{ width: `${(node.running / node.max) * 100}%` }}
-              ></div>
+            <div className="node-details">
+              <div className="detail-row">
+                <span>Total Cores:</span>
+                <span>{node.max_cpus}</span>
+              </div>
+              <div className="detail-row">
+                <span>Active Tasks:</span>
+                <span>{node.running_jobs}</span>
+              </div>
+            </div>
+
+            {/* Visual Load Bar */}
+            <div className="usage-section">
+              <div className="usage-label">Node Load: {node.utilization}</div>
+              <div className="usage-bar-bg">
+                <div 
+                  className="usage-bar-fill" 
+                  style={{ width: node.utilization }}
+                ></div>
+              </div>
             </div>
           </div>
         ))}
@@ -106,4 +144,3 @@ export default function NodeMap() {
     </div>
   );
 }
-

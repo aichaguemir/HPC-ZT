@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
-import { getToken } from "../../store/auth";
+import api from "../../store/api"; 
 
 
 export default function AuditLog() {
@@ -10,40 +9,31 @@ export default function AuditLog() {
   const [verifying, setVerifying] = useState(false);
   const [verificationResult, setVerificationResult] = useState(null);
 
-  
-  const fetchLogs = async () => {
-    setLoading(true);
-    try {
-      const token = getToken();
-      const response = await axios.get("http://localhost:8000/api/v1/admin/audit/logs", {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      
-      const data = response.data;
-      if (data && Array.isArray(data.logs)) {
-        setLogs(data.logs);
-      } else if (Array.isArray(data)) {
-        setLogs(data);
-      } else {
-        setLogs([]);
-      }
-    } catch (err) {
-      console.error("Error fetching logs:", err);
-      setLogs([]);
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  
+ const fetchLogs = async (isInitial = false) => {
+  if (isInitial) setLoading(true);
+  try {
+    // جربي هاد الرابط أولاً
+    const response = await api.get("/admin/audit/logs"); 
+    
+    console.log("Audit Data:", response.data); // شوفي الـ Console إذا جات البيانات
+    
+    // التعامل مع شكل البيانات (Object أو Array)
+    const data = response.data;
+    setLogs(data.logs || (Array.isArray(data) ? data : []));
+    
+  } catch (err) {
+    console.error("Audit Fetch Error:", err);
+  } finally {
+    if (isInitial) setLoading(false);
+  }
+};
+ 
   const handleVerifyChain = async () => {
     setVerifying(true);
     setVerificationResult(null);
     try {
-      const token = getToken();
-      await axios.get("http://localhost:8000/api/v1/admin/audit/verify", {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await api.get("/admin/audit/verify");
       setVerificationResult({ type: "success", text: "Audit Chain Integrity Verified." });
     } catch (err) {
       setVerificationResult({ type: "error", text: "Security Alert: Log Integrity Compromised!" });
@@ -52,14 +42,10 @@ export default function AuditLog() {
     }
   };
 
- 
   const handleUserIps = async (userId, username) => {
     if (!userId) return;
     try {
-      const token = getToken();
-      const response = await axios.get(`http://localhost:8000/api/v1/admin/users/${userId}/ips`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await api.get(`/admin/users/${userId}/ips`);
       const ipList = response.data.ips?.map(item => item.ip).join(", ") || "No records found";
       alert(`IP History for ${username || userId}:\n${ipList}`);
     } catch (err) {
@@ -68,12 +54,20 @@ export default function AuditLog() {
   };
 
   useEffect(() => {
-    fetchLogs();
+  
+    fetchLogs(true);
+
+
+    const interval = setInterval(() => {
+      fetchLogs(false);
+    }, 30000);
+
+    return () => clearInterval(interval);
   }, []);
 
- 
   const filtered = Array.isArray(logs) ? logs.filter(log => 
     log.action?.toLowerCase().includes(search.toLowerCase()) ||
+    log.username?.toLowerCase().includes(search.toLowerCase()) ||
     log.user_id?.toLowerCase().includes(search.toLowerCase()) ||
     log.ip_address?.includes(search)
   ) : [];
@@ -99,7 +93,7 @@ export default function AuditLog() {
         <input
           className="audit-search-input"
           type="text"
-          placeholder="Search by action, user ID or IP..."
+          placeholder="Search logs..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -110,7 +104,7 @@ export default function AuditLog() {
           <thead>
             <tr>
               <th>Timestamp</th>
-              <th>User ID</th>
+              <th>Username</th> 
               <th>Action</th>
               <th>IP Address</th>
               <th>Result</th>
@@ -125,7 +119,7 @@ export default function AuditLog() {
                   </td>
                   <td>
                     <button className="user-link" onClick={() => handleUserIps(log.user_id, log.username)}>
-                      {log.username || (log.user_id ? log.user_id.substring(0, 8) : "System")}
+                      {log.username || "System"}
                     </button>
                   </td>
                   <td>
@@ -141,7 +135,7 @@ export default function AuditLog() {
               ))
             ) : (
               <tr>
-                <td colSpan="5" style={{ textAlign: "center", padding: "40px", color: "#a0aec0" }}>
+                <td colSpan="5" style={{ textAlign: "center", padding: "40px" }}>
                   No audit records found.
                 </td>
               </tr>
