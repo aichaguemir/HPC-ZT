@@ -1,40 +1,53 @@
 import React, { useState } from "react";
+import axios from "axios";
+import { getToken } from "../../store/auth";
 
 export default function SubmitJob() {
-  const [jobName, setJobName] = useState("");
-  const [cpu, setCpu] = useState(1);
-  const [priority, setPriority] = useState("medium");
-  const [time, setTime] = useState("");
   const [file, setFile] = useState(null);
+  const [cores, setCores] = useState(1);
+  const [memory, setMemory] = useState(1024);
+  const [queue, setQueue] = useState("low_priority");
+  const [wallTimeHours, setWallTimeHours] = useState(1);
+  const [wallTimeMinutes, setWallTimeMinutes] = useState(0);
+  
+  const [loading, setLoading] = useState(false);
+  const [serverError, setServerError] = useState(""); 
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setServerError(""); 
 
-    if (!jobName || !time || !file) {
-      alert("Please fill all fields!");
+    if (!file) {
+      setServerError("Please upload a script file first!");
       return;
     }
 
-    const newJob = {
-      id: Date.now(),
-      name: jobName,
-      cpu,
-      priority,
-      time,
-      fileName: file.name,
-      status: "PENDING"
-    };
+    setLoading(true);
+    const token = getToken();
 
-    console.log("Job submitted:", newJob);
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("cores", parseInt(cores));
+    formData.append("memory", parseInt(memory));
+    formData.append("queue", queue);
+    formData.append("wall_time_hours", parseInt(wallTimeHours));
+    formData.append("wall_time_minutes", parseInt(wallTimeMinutes));
 
-    alert("Job submitted successfully!");
-
-    // reset
-    setJobName("");
-    setCpu(1);
-    setPriority("medium");
-    setTime("");
-    setFile(null);
+    try {
+      const res = await axios.post("http://localhost:8000/api/v1/jobs/submit", formData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "multipart/form-data",
+        },
+      });
+      alert(`Job submitted! ID: ${res.data.job_id}`);
+      setFile(null);
+    } catch (err) {
+      const detail = err.response?.data?.detail;
+      setServerError(typeof detail === 'string' ? detail : (detail?.message || "Submission failed"));
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -42,65 +55,87 @@ export default function SubmitJob() {
       <h1>Submit Job</h1>
 
       <form className="card" onSubmit={handleSubmit}>
+        
+     
+        {serverError && (
+          <div style={{ 
+            backgroundColor: "#fff5f5", 
+            color: "#dc3545", 
+            padding: "10px", 
+            borderRadius: "5px", 
+            border: "1px solid #dc3545", 
+            marginBottom: "15px",
+            fontSize: "14px",
+            fontWeight: "bold"
+          }}>
+            {serverError}
+          </div>
+        )}
 
-        {/* Job Name */}
-        <label className="label">Job Name</label>
-        <input
-          type="text"
-          placeholder="Enter job name"
-          value={jobName}
-          onChange={(e) => setJobName(e.target.value)}
-        />
-
-        {/* CPU */}
-        <label className="label">CPU Cores</label>
-        <input
-          type="number"
-          min="1"
-          value={cpu}
-          onChange={(e) => setCpu(e.target.value)}
-        />
-
-        {/* Priority */}
-        <label className="label">Priority</label>
-        <select
-          value={priority}
-          onChange={(e) => setPriority(e.target.value)}
-        >
-          <option value="low">Low</option>
-          <option value="medium">Medium</option>
-          <option value="high">High</option>
-        </select>
-
-        {/* Time */}
-        <label className="label">Execution Time (minutes)</label>
-        <input
-          type="number"
-          placeholder="e.g. 60"
-          value={time}
-          onChange={(e) => setTime(e.target.value)}
-        />
-
-        {/* Upload */}
-        <label className="label">Upload Script (.sh)</label>
+        {/* Upload File */}
+        <label className="label">Upload Script (.sh, .py)</label>
         <input
           type="file"
           accept=".sh,.py"
-          onChange={(e) => setFile(e.target.files[0])}
+          onChange={(e) => {
+            setFile(e.target.files[0]);
+            setServerError(""); 
+          }}
+          style={{ 
+            border: !file && serverError ? "2px solid #dc3545" : "",
+            padding: "8px",
+            width: "100%"
+          }}
         />
-
-        {/* File preview */}
-        {file && (
-          <p style={{ marginTop: "10px", color: "var(--muted)" }}>
-             {file.name}
-          </p>
+        {file ? (
+          <p style={{ marginTop: "5px", color: "#28a745", fontSize: "13px" }}>Selected: {file.name}</p>
+        ) : (
+          <p style={{ marginTop: "5px", color: "#888", fontSize: "12px" }}>No script selected yet.</p>
         )}
 
-        {/* Button */}
-        <button className="btn" style={{ marginTop: "20px" }}>
-          Submit Job
-        </button>
+        <hr style={{ margin: "20px 0", border: "0.5px solid #eee" }} />
 
+        {/* Resources */}
+        <label className="label">CPU Cores</label>
+        <input type="number" min="1" value={cores} onChange={(e) => setCores(e.target.value)} />
+
+        <label className="label">Memory (MB)</label>
+        <input type="number" min="512" value={memory} onChange={(e) => setMemory(e.target.value)} />
+
+        <label className="label">Queue (Priority)</label>
+        <select value={queue} onChange={(e) => setQueue(e.target.value)}>
+          <option value="low_priority">Low Priority</option>
+          <option value="medium_priority">Medium Priority</option>
+          <option value="high_priority">High Priority</option>
+        </select>
+
+        {/* Execution Time separated */}
+        <div style={{ marginTop: "15px" }}>
+          <label className="label">Wall Time: Hours</label>
+          <input 
+            type="number" 
+            min="0" 
+            placeholder="0"
+            value={wallTimeHours} 
+            onChange={(e) => setWallTimeHours(e.target.value)} 
+          />
+        </div>
+
+        <div style={{ marginTop: "15px" }}>
+          <label className="label">Wall Time: Minutes</label>
+          <input 
+            type="number" 
+            min="0" 
+            max="59" 
+            placeholder="0"
+            value={wallTimeMinutes} 
+            onChange={(e) => setWallTimeMinutes(e.target.value)} 
+          />
+        </div>
+
+        <button className="btn" style={{ marginTop: "30px", width: "100%" }} disabled={loading}>
+          {loading ? "Processing..." : "Submit Job to Cluster"}
+        </button>
       </form>
     </div>
   );
