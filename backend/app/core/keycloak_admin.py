@@ -2,6 +2,7 @@ import httpx
 from app.core.config import KEYCLOAK_URL, KEYCLOAK_REALM
 from app.core.logging import logger
 import os
+import json as json_lib
 
 KEYCLOAK_ADMIN_USER     = os.getenv("KEYCLOAK_ADMIN_USER", "admin")
 KEYCLOAK_ADMIN_PASSWORD = os.getenv("KEYCLOAK_ADMIN_PASSWORD", "admin")
@@ -91,10 +92,15 @@ async def remove_keycloak_role(keycloak_id: str, role_name: str) -> None:
         role_response.raise_for_status()
         role = role_response.json()
 
-        delete_response = await client.delete(
-            f"{KEYCLOAK_URL}/admin/realms/{KEYCLOAK_REALM}/users/{keycloak_id}/role-mappings/realm",
-            headers={"Authorization": f"Bearer {token}"},
-            json=[{"id": role["id"], "name": role["name"]}]
+        # Use request() directly — DELETE with body
+        delete_response = await client.request(
+            method  = "DELETE",
+            url     = f"{KEYCLOAK_URL}/admin/realms/{KEYCLOAK_REALM}/users/{keycloak_id}/role-mappings/realm",
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type":  "application/json",
+            },
+            content = json_lib.dumps([{"id": role["id"], "name": role["name"]}])
         )
         delete_response.raise_for_status()
         logger.info(f"Role '{role_name}' removed from {keycloak_id}")
