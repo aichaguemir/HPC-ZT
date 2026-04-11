@@ -1,12 +1,10 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
-import { getToken } from "../../store/auth";
+import api from "../../store/api"; 
 
 
 /**
  * UserManagement Component
- * Handles administrative tasks: listing approved users, searching, 
- * toggling account status, updating roles, and revoking access.
+ * Comprehensive management of HPC portal users.
  */
 export default function UserManagement() {
   // --- State Management ---
@@ -14,64 +12,62 @@ export default function UserManagement() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [isSaving, setIsSaving] = useState(false);
-  // Modal States for Role Modification
+  
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [newRole, setNewRole] = useState("");
 
   /**
-   * 1. Fetch Users
-   * Retrieves all users and filters for those already approved.
+   * 1. Fetch Users from Backend
    */
-  const fetchUsers = async () => {
-    setLoading(true);
+  const fetchUsers = async (isInitial = false) => {
+    if (isInitial) setLoading(true);
     try {
-      const token = getToken();
-      const response = await axios.get("http://localhost:8000/api/v1/admin/users", {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await api.get("/admin/users");
+      console.log("Backend Raw Response:", response.data); // Debugging line
 
-      // Handle different possible API response structures
-      const allUsers = Array.isArray(response.data) ? response.data : (response.data.users || []);
+      // Extract users array safely
+      const data = response.data;
+      const allUsers = Array.isArray(data) ? data : (data.users || []);
       
-      // Filter: Only show users who are already part of the system
-      const approvedUsers = allUsers.filter(u => u.is_approved === true);
+      // Filter approved users. Note: Check if your backend uses 'is_approved' or 'is_active'
+      const approvedUsers = allUsers.filter(u => u.is_approved === true || u.status === "approved");
       
       setUsers(approvedUsers);
       setError(null);
     } catch (err) {
       console.error("Fetch Error:", err);
-      setError("Failed to load user directory. Please check backend connection.");
+      setError("Connection to HPC Admin Node failed.");
     } finally {
-      setLoading(false);
+      if (isInitial) setLoading(false);
     }
   };
 
-  // Load data on component mount
   useEffect(() => {
-    fetchUsers();
+    fetchUsers(true);
+    const interval = setInterval(() => fetchUsers(false), 30000);
+    return () => clearInterval(interval);
   }, []);
 
   /**
-   * 2. Toggle Account Status
-   * Uses POST for both deactivate and reactivate actions as required by Backend.
+   * 2. Toggle Account Access (Deactivate/Reactivate)
    */
   const handleToggleActive = async (user) => {
+    // IMPORTANT: Check if your backend uses 'user_id' or 'id'
+    const uid = user.user_id || user.id; 
     const action = user.is_active ? "deactivate" : "reactivate";
+    
     try {
-      const token = getToken();
-      await axios.post(`http://localhost:8000/api/v1/admin/users/${user.user_id}/${action}`, {}, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      fetchUsers(); // Refresh UI
+      await api.post(`/admin/users/${uid}/${action}`);
+      fetchUsers(); 
     } catch (err) {
-      alert(`Operation failed: Could not ${action} user.`);
+      console.error("Toggle Error:", err.response);
+      alert(`Failed to ${action} user.`);
     }
   };
 
   /**
-   * 3. Role Management Logic
+   * 3. Role Modification Logic
    */
   const openRoleModal = (user) => {
     setSelectedUser(user);
@@ -79,69 +75,49 @@ export default function UserManagement() {
     setIsModalOpen(true);
   };
 
-const handleRoleChange = async (userId, selectedRole) => {
+  const handleRoleChange = async (userId, selectedRole) => {
     try {
-      const token = getToken();
+      // Sending 'new_role' as expected by the backend payload
+      await api.put(`/admin/users/${userId}/role`, { new_role: selectedRole });
       
-     
-      const payload = {
-        new_role: selectedRole 
-      };
-
-      await axios.put(
-        `http://localhost:8000/api/v1/admin/users/${userId}/role`,
-        payload,
-        {
-          headers: { Authorization: `Bearer ${token}` }
-        }
-      );
-
       alert("Role updated successfully!");
       setIsModalOpen(false); 
-      fetchUsers();         
+      fetchUsers();          
     } catch (err) {
-      console.error("Error updating role:", err.response?.data);
-     
-      const errorMsg = err.response?.data?.detail;
-      alert("Error: " + (Array.isArray(errorMsg) ? errorMsg[0].msg : errorMsg || "Could not update role"));
-    }
-  };
-  /**
-   * 4. Revoke Access
-   * Permanently removes a user from the HPC portal.
-   */
-  const handleRevoke = async (userId) => {
-    if (!window.confirm("CRITICAL: Are you sure? This will permanently revoke access.")) return;
-    try {
-      const token = getToken();
-      await axios.post(`http://localhost:8000/api/v1/admin/users/${userId}/revoke`, {}, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      fetchUsers();
-    } catch (err) {
-      alert("Error: Access revocation failed.");
+      alert("Role update failed. Check console for details.");
     }
   };
 
-  // 5. Search Filter Logic
+  /**
+   * 4. Revoke Access (Delete)
+   */
+  const handleRevoke = async (userId) => {
+    if (!window.confirm("CRITICAL: Permanently revoke this user's access?")) return;
+    try {
+      await api.post(`/admin/users/${userId}/revoke`);
+      fetchUsers();
+    } catch (err) {
+      alert("Revocation failed.");
+    }
+  };
+
+  // 5. Filter users based on search input
   const filteredUsers = users.filter((u) =>
     u.username?.toLowerCase().includes(search.toLowerCase()) ||
-    u.role?.toLowerCase().includes(search.toLowerCase()) ||
     u.email?.toLowerCase().includes(search.toLowerCase())
   );
 
-  if (loading) return <div className="loading-container">Synchronizing with HPC Admin Node...</div>;
+  if (loading) return <div className="loading">Syncing User Directory...</div>;
 
   return (
     <div className="audit-page">
-      {/* Page Header and Search Section */}
       <div className="audit-header">
         <h1 className="audit-title">User Management</h1>
         <div className="search-container">
           <input
             type="text"
             className="audit-search-input"
-            placeholder="Search by name, role, or email..."
+            placeholder="Search users..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -150,88 +126,74 @@ const handleRoleChange = async (userId, selectedRole) => {
 
       {error && <div className="error-banner">{error}</div>}
 
-      {/* Users Table */}
       <div className="table-card">
         <table className="audit-table">
           <thead>
             <tr>
-              <th>User Details</th>
+              <th>User Identity</th>
               <th>System Role</th>
-              <th>Status</th>
-              <th>Administrative Actions</th>
+              <th>Access Status</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {filteredUsers.map((user) => (
-              <tr key={user.user_id}>
-                <td>
-                  <div className="username-text">{user.username}</div>
-                  <div className="email-subtext-dark">{user.email}</div>
-                </td>
-                <td>
-                  <span className="tag-role-large">{user.role}</span>
-                </td>
-                <td>
-                  <span className={`status-badge ${user.is_active ? "approved" : "pending"}`}>
-                    <span className="dot"></span>
-                    {user.is_active ? "Active" : "Disabled"}
-                  </span>
-                </td>
-                <td>
-                  {/* Action Buttons with defined gap in CSS */}
-                  <div className="action-buttons-group">
-                    <button className="verify-btn" onClick={() => handleToggleActive(user)}>
-                      {user.is_active ? "Deactivate" : "Reactivate"}
-                    </button>
-                    <button className="change-role-btn" onClick={() => openRoleModal(user)}>
-                      Change Role
-                    </button>
-                    <button className="revoke-card-btn" onClick={() => handleRevoke(user.user_id)}>
-                      Revoke
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+            {filteredUsers.length > 0 ? (
+              filteredUsers.map((user) => (
+                <tr key={user.user_id || user.id}>
+                  <td>
+                    <div className="username-text">{user.username}</div>
+                    <div className="email-subtext-dark">{user.email}</div>
+                  </td>
+                  <td><span className="tag-role-large">{user.role}</span></td>
+                  <td>
+                    <span className={`status-badge ${user.is_active ? "approved" : "pending"}`}>
+                      {user.is_active ? "Active" : "Disabled"}
+                    </span>
+                  </td>
+                  <td>
+                    <div className="action-buttons-group">
+                      <button className="verify-btn" onClick={() => handleToggleActive(user)}>
+                        {user.is_active ? "Deactivate" : "Reactivate"}
+                      </button>
+                      <button className="change-role-btn" onClick={() => openRoleModal(user)}>
+                        Role
+                      </button>
+                      <button className="revoke-card-btn" onClick={() => handleRevoke(user.user_id || user.id)}>
+                        Revoke
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr><td colSpan="4" style={{textAlign:"center", padding:"30px"}}>No approved users found.</td></tr>
+            )}
           </tbody>
         </table>
       </div>
 
-      {/* Pop-up Modal for Role Changes */}
+      {/* Role Modal */}
       {isModalOpen && (
         <div className="modal-overlay">
           <div className="modal-card">
-            <h3 className="modal-title">Update Permissions</h3>
-            <p>Assigning new role to: <strong>{selectedUser?.username}</strong></p>
-            
+            <h3>Change Role: {selectedUser?.username}</h3>
             <select 
               className="modal-select" 
               value={newRole} 
               onChange={(e) => setNewRole(e.target.value)}
             >
-              <option value="researcher">Researcher</option>
               <option value="student">Student</option>
+              <option value="researcher">Researcher</option>
+              <option value="admin">Admin</option>
             </select>
-
             <div className="modal-footer">
-              <button className="cancel-btn" onClick={() => setIsModalOpen(false)}>Cancel</button>
+              <button onClick={() => setIsModalOpen(false)}>Cancel</button>
               <button 
-  onClick={() => handleRoleChange(selectedUser.user_id, newRole)}
-  style={{
-    backgroundColor: "#3b82f6", 
-    color: "white",
-    padding: "10px 20px",
-    borderRadius: "6px",
-    border: "none",
-    cursor: "pointer",
-    fontWeight: "500",
-    transition: "background-color 0.2s"
-  }}
-  onMouseOver={(e) => e.target.style.backgroundColor = "#2563eb"} 
-  onMouseOut={(e) => e.target.style.backgroundColor = "#3b82f6"}
->
-  Save Changes
-</button>
+                className="save-btn" 
+                onClick={() => handleRoleChange(selectedUser.user_id || selectedUser.id, newRole)}
+              >
+                Save Changes
+              </button>
             </div>
           </div>
         </div>

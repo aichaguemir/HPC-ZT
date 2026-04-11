@@ -1,27 +1,29 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
-import { getToken } from "../../../store/auth";
+import api from "../../../store/api"; // Updated to use your smart API instance
+
 
 /**
  * PendingUsers Component
  * Handles the approval and rejection of new user registration requests.
+ * Uses the centralized API instance for automatic token management.
  */
 export default function PendingUsers() {
   const [pendingUsers, setPendingUsers] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // 1. Fetch pending requests from the API
-  const fetchPending = async () => {
-    setLoading(true);
+  /**
+   * 1. Fetch pending requests from the API
+   * @param {boolean} isInitial - Controls the full-page loading state
+   */
+  const fetchPending = async (isInitial = false) => {
+    if (isInitial) setLoading(true);
     try {
-      const token = getToken();
-      const res = await axios.get("http://localhost:8000/api/v1/admin/users/pending", {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      // Automatic token handling via api.js
+      const res = await api.get("/admin/users/pending");
 
-      console.log("Data from server:", res.data);  
+      console.log("Pending Users Data:", res.data);
       
-     
+      // Support both { pending: [] } structure and direct array [] structure
       const actualData = res.data.pending || (Array.isArray(res.data) ? res.data : []);
 
       setPendingUsers(actualData);
@@ -29,37 +31,45 @@ export default function PendingUsers() {
       console.error("Fetch error:", err);
       setPendingUsers([]);
     } finally {
-      setLoading(false);
+      if (isInitial) setLoading(false);
     }
   };
 
-  // 2. Handle Admin Action (Approve/Reject)
+  /**
+   * 2. Handle Admin Action (Approve/Reject)
+   * @param {string} userId - The unique ID of the user
+   * @param {string} action - 'approve' or 'reject'
+   */
   const handleAction = async (userId, action) => {
- 
+    // Confirmation for rejection to prevent accidental deletions
     if (action === "reject" && !window.confirm("Are you sure you want to delete this registration request?")) {
-        return;
+      return;
     }
 
     try {
-      const token = getToken();
-    
-      await axios.post(`http://localhost:8000/api/v1/admin/users/${userId}/${action}`, {}, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      // POST request to trigger approval/rejection logic on the backend
+      await api.post(`/admin/users/${userId}/${action}`);
       
-      alert(`User successfully ${action}ed.`);
-      fetchPending(); 
+      alert(`User request successfully ${action}ed.`);
+      fetchPending(false); // Refresh the list after action
     } catch (err) {
       console.error(`Error during ${action}:`, err);
-      alert(`System Error: Could not ${action} user.`);
+      alert(`System Error: Could not ${action} user request.`);
     }
   };
 
+  // Initial load and background sync every 30 seconds
   useEffect(() => {
-    fetchPending();
+    fetchPending(true);
+    
+    const interval = setInterval(() => {
+      fetchPending(false);
+    }, 30000);
+
+    return () => clearInterval(interval);
   }, []);
 
-  if (loading) return <div className="loading-state">Loading Pending Requests...</div>;
+  if (loading) return <div className="loading-state">Synchronizing Pending Requests...</div>;
 
   return (
     <div className="audit-page">
@@ -70,39 +80,40 @@ export default function PendingUsers() {
           <thead>
             <tr>
               <th>User Info</th>
-              <th>Email</th>
+              <th>Email Address</th>
               <th>Requested Role</th>
-              <th>Actions</th>
+              <th>Administrative Actions</th>
             </tr>
           </thead>
           <tbody>
             {pendingUsers.length > 0 ? (
               pendingUsers.map(user => (
-                <tr key={user.user_id}>
+                <tr key={user.user_id || user.id}>
                   <td>
                     <div className="username-text">{user.username}</div>
-                    <small style={{color: '#94a3b8', fontSize: '10px'}}>{user.user_id}</small>
+                    <small style={{ color: '#94a3b8', fontSize: '10px' }}>
+                        ID: {user.user_id || user.id}
+                    </small>
                   </td>
                   <td>
                     <div className="email-subtext-dark">{user.email}</div>
                   </td>
                   <td>
-
                     <span className="tag-role-large">
-                        {user.requested_role || 'student'}
+                      {user.requested_role || 'student'}
                     </span>
                   </td>
                   <td>
                     <div className="action-buttons-group">
                       <button 
                         className="verify-btn" 
-                        onClick={() => handleAction(user.user_id, "approve")}
+                        onClick={() => handleAction(user.user_id || user.id, "approve")}
                       >
                         Approve
                       </button>
                       <button 
                         className="revoke-card-btn" 
-                        onClick={() => handleAction(user.user_id, "reject")}
+                        onClick={() => handleAction(user.user_id || user.id, "reject")}
                       >
                         Reject
                       </button>

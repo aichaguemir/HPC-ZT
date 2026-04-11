@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react"; 
 import axios from "axios";
 import { getToken } from "../../store/auth";
 
@@ -7,9 +7,8 @@ export default function JobQueue() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
-  const [error, setError] = useState("");
+  const [error, setError] = useState(""); 
 
-  // States للنافذة المنبثقة (Output Modal)
   const [showModal, setShowModal] = useState(false);
   const [currentOutput, setCurrentOutput] = useState("");
   const [selectedJobId, setSelectedJobId] = useState(null);
@@ -17,10 +16,11 @@ export default function JobQueue() {
   const [page, setPage] = useState(1);
   const jobsPerPage = 5;
 
-  // 1. جلب قائمة الوظائف
-  const fetchJobs = async () => {
+
+  const fetchJobs = useCallback(async () => {
     try {
       setLoading(true);
+      setError(""); 
       const token = getToken();
       const res = await axios.get("http://localhost:8000/api/v1/jobs/", {
         headers: { Authorization: `Bearer ${token}` }
@@ -34,13 +34,13 @@ export default function JobQueue() {
         }
       });
     } catch (err) {
-      setError("Failed to sync with HPC cluster.");
+      console.error("Fetch Error:", err);
+      setError("Failed to sync with HPC cluster."); 
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  // 2. تحديث الحالة
   const updateSingleJobStatus = async (jobId) => {
     try {
       const token = getToken();
@@ -55,7 +55,17 @@ export default function JobQueue() {
     }
   };
 
-  // 3. جلب المخرجات (Success Case)
+  const cleanLogText = (text) => {
+    if (!text) return "No content available.";
+    return text
+      .split('\n')
+      .filter(line => {
+        const l = line.trim();
+        return !l.startsWith("Read file <") && !l.startsWith("PS:") && l !== "";
+      })
+      .join('\n');
+  };
+
   const fetchJobOutput = async (jobId) => {
     try {
       setSelectedJobId(jobId);
@@ -63,27 +73,28 @@ export default function JobQueue() {
       const res = await axios.get(`http://localhost:8000/api/v1/jobs/${jobId}/output`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setCurrentOutput(res.data.output || "No output content available.");
+      
+      setCurrentOutput(cleanLogText(res.data.output));
       setShowModal(true);
     } catch (err) {
       alert("Could not retrieve job output.");
     }
   };
 
-  // 4. جلب الخطأ (Error Case)
   const fetchJobError = async (jobId) => {
     try {
       const token = getToken();
       const res = await axios.get(`http://localhost:8000/api/v1/jobs/${jobId}/error`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      alert(`Job #${jobId} Error Log:\n\n${res.data.error || "No error details reported."}`);
+      
+      const cleanedError = cleanLogText(res.data.error);
+      alert(`Job #${jobId} Error Log:\n\n${cleanedError}`);
     } catch (err) {
       alert("Could not retrieve error logs.");
     }
   };
 
-  // 5. إلغاء الوظيفة
   const cancelJob = async (id) => {
     if (!window.confirm(`Are you sure you want to cancel job #${id}?`)) return;
     try {
@@ -98,11 +109,12 @@ export default function JobQueue() {
     }
   };
 
+ 
   useEffect(() => {
     fetchJobs();
     const interval = setInterval(fetchJobs, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchJobs]); 
 
   const renderStatus = (status) => {
     const s = status?.toUpperCase() || "UNKNOWN";
@@ -134,6 +146,8 @@ export default function JobQueue() {
     <div className="job-queue-wrapper">
       <div className="header-actions">
         <h1>HPC Job Monitor</h1>
+    
+        {error && <span style={{ color: "#dc2626", marginRight: "15px", fontWeight: "bold" }}>{error}</span>}
         <button onClick={fetchJobs} className="btn-refresh-pro">
           {loading ? "Syncing..." : "Refresh Status"}
         </button>
@@ -212,7 +226,11 @@ export default function JobQueue() {
               <h3>Output Log - Job #{selectedJobId}</h3>
               <button className="close-btn" onClick={() => setShowModal(false)}>×</button>
             </div>
-            <div className="modal-body"><pre>{currentOutput}</pre></div>
+            <div className="modal-body">
+              <pre style={{ backgroundColor: "#1a202c", color: "#cbd5e0", padding: "15px", borderRadius: "8px", overflowX: "auto" }}>
+                {currentOutput}
+              </pre>
+            </div>
             <div className="modal-footer"><button onClick={() => setShowModal(false)}>Close</button></div>
           </div>
         </div>

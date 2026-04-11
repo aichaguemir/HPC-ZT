@@ -1,34 +1,41 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
-import { getToken } from "../../store/auth";
+import api from "../../store/api"; 
 
+
+/**
+ * Profile Component with Automatic Refresh
+ * Displays user info and live HPC job statistics.
+ */
 export default function Profile() {
   const [stats, setStats] = useState({ totalJobs: 0, running: 0, completed: 0, failed: 0 });
   const [userInfo, setUserInfo] = useState({ username: "", email: "", role: "" });
   const [loading, setLoading] = useState(true);
 
-  const fetchProfileAndStats = async () => {
+  /**
+   * Main function to fetch user data and calculate job statistics.
+   * @param {boolean} isInitial - If true, displays the loading spinner.
+   */
+  const fetchProfileAndStats = async (isInitial = false) => {
+    if (isInitial) setLoading(true);
     try {
-      setLoading(true);
-      const token = getToken();
-      const headers = { Authorization: `Bearer ${token}` };
-
-    
-      const userRes = await axios.get("http://localhost:8000/api/v1/auth/me", { headers });
+      // 1. Fetch user identity (No need for refresh on this one usually, but we keep it sync)
+      const userRes = await api.get("/auth/me");
       setUserInfo(userRes.data);
 
-    
-      const jobsRes = await axios.get("http://localhost:8000/api/v1/jobs/", { headers });
+      // 2. Fetch all jobs for stats calculation
+      const jobsRes = await api.get("/jobs/");
       const jobsList = jobsRes.data.jobs || (Array.isArray(jobsRes.data) ? jobsRes.data : []);
 
+      // 3. Fetch statuses in parallel for better performance
       const statusPromises = jobsList.map(job =>
-        axios.get(`http://localhost:8000/api/v1/jobs/${job.job_id}/status`, { headers })
+        api.get(`/jobs/${job.job_id}/status`)
           .catch(() => ({ data: { status: 'UNKNOWN' } }))
       );
 
       const statuses = await Promise.all(statusPromises);
 
       const newStats = { totalJobs: jobsList.length, running: 0, completed: 0, failed: 0 };
+      
       statuses.forEach((res) => {
         const s = res.data.status?.toUpperCase();
         if (s === "RUN" || s === "RUNNING" || s === "ACTIVE") newStats.running++;
@@ -38,17 +45,26 @@ export default function Profile() {
 
       setStats(newStats);
     } catch (err) {
-      console.error("Profile Logic Error:", err);
+      console.error("Profile Refresh Error:", err);
     } finally {
-      setLoading(false);
+      if (isInitial) setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchProfileAndStats();
+    // Initial data fetch
+    fetchProfileAndStats(true);
+
+    // Set up interval for automatic background refresh (every 30 seconds)
+    const interval = setInterval(() => {
+      fetchProfileAndStats(false);
+    }, 30000);
+
+    // Cleanup interval on component unmount
+    return () => clearInterval(interval);
   }, []);
 
-  if (loading) return <div className="loading-state">Loading Profile...</div>;
+  if (loading) return <div className="loading-state">Synchronizing Profile & Stats...</div>;
 
   return (
     <div className="profile-container">
@@ -56,11 +72,10 @@ export default function Profile() {
         <h1>User Profile</h1>
       </header>
 
-    
       <section className="user-info-section">
         <div className="card profile-main-card">
           <div className="profile-avatar-large">
-            {userInfo.username?.charAt(0).toUpperCase()}
+            {userInfo.username?.charAt(0).toUpperCase() || "?"}
           </div>
           <div className="profile-details">
             <h2>{userInfo.username}</h2>
@@ -72,8 +87,10 @@ export default function Profile() {
         </div>
       </section>
 
-      <h3>Usage Overview</h3>
-      
+      <div className="stats-header">
+        <h3>HPC Usage Overview</h3>
+        <small style={{ color: '#94a3b8' }}>(Auto-updates every 30s)</small>
+      </div>
       
       <div className="grid">
         <div className="card stat-card">
