@@ -10,6 +10,7 @@ from app.core.config import KEYCLOAK_URL, KEYCLOAK_REALM
 from app.db.session import get_db
 from app.db.models import User
 from app.schemas.users import UserResponse
+import pyotp, qrcode, io, base64
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -123,4 +124,69 @@ async def logout(
             f"{KEYCLOAK_URL}/realms/{KEYCLOAK_REALM}"
             f"/protocol/openid-connect/logout"
         )
+    }
+
+
+# POST /auth/totp/verify  — called after CARTA triggers MFA
+@router.post("/totp/verify")
+async def verify_totp(
+    request:      Request,
+    code:         str,
+    current_user: User         = Depends(get_current_user),
+    db:           AsyncSession = Depends(get_db)
+):
+    if not current_user.totp_secret:
+        raise HTTPException(400, "TOTP not configured.")
+
+    import pyotp
+    totp = pyotp.TOTP(current_user.totp_secret)
+    if not totp.verify(code, valid_window=1):
+        raise HTTPException(401, "Invalid TOTP code")
+
+    # Mark device/IP as verified after successful MFA
+    from app.core.carta import mark_ip_verified
+    ip = request.client.host if request.client else "unknown"
+    await mark_ip_verified(current_user.user_id, ip, db)
+
+    # Write audit entry
+    await write_audit_entry(
+        db         = db,
+        action     = "login",
+        result     = "mfa_verified",
+        user_id    = current_user.user_id,
+        ip_address = ip,
+        detail     = {"mfa_method": "totp", "ip_verified": ip}
+    )
+    await db.commit()
+
+    return {"verified": True, "message": "MFA verified. IP registered as trusted."}
+
+@router.get("/totp/setup")
+async def get_totp_setup(
+    current_user: User         = Depends(get_current_user),
+    db:           AsyncSession = Depends(get_db)
+):
+    """Returns QR code for TOTP setup. Called on first login."""
+    import pyotp, qrcode, io, base64
+
+    if not current_user.totp_secret:
+        # Generate new secret
+        current_user.totp_secret = pyotp.random_base32()
+        await db.commit()
+
+    totp = pyotp.TOTP(current_user.totp_secret)
+    uri  = totp.provisioning_uri(
+        name        = current_user.email,
+        issuer_name = "HPC-Gateway"
+    )
+
+    img    = qrcode.make(uri)
+    buf    = io.BytesIO()
+    img.save(buf, format="PNG")
+    qr_b64 = base64.b64encode(buf.getvalue()).decode()
+
+    return {
+        "qr_code":    f"data:image/png;base64,{qr_b64}",
+        "secret":     current_user.totp_secret,
+        "configured": True
     }
