@@ -283,8 +283,8 @@ async def collect_signals(
         await register_ip(user.user_id, ip, db, verified=True)
 
     # ── R4: Temporal Anomaly ───────────────────────────────────────────────
-    signals["R4_temporal"] = WEIGHTS["R4_temporal"] if (now.hour < 6 or now.hour >= 22) else 0
-    
+    #signals["R4_temporal"] = WEIGHTS["R4_temporal"] if (now.hour < 6 or now.hour >= 22) else 0
+    signals["R4_temporal"] = WEIGHTS["R4_temporal"] 
    
 
 

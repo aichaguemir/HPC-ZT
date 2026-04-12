@@ -164,8 +164,7 @@ async def submit_job(
         session = session,
     )
     await apply_carta_result(pending_job, carta_result, db)
- 
-    # ⑪ Block if critical risk
+    logger.info(f"CARTA DEBUG: request={carta_result['request_score']} session={carta_result['session_score']} action={carta_result['action']['action']}      signals={carta_result['signals']}") 
     if carta_result["action"]["action"] == "block":
         await db.delete(pending_job)
         await db.commit()
