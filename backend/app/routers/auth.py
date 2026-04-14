@@ -1,9 +1,11 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel, EmailStr
 
-from app.core.auth import get_current_user
+from app.core.auth import get_current_user, get_current_user_and_token, require_admin
 from app.core.keycloak_admin import create_keycloak_user
 from app.core.audit_chain import write_audit_entry
 from app.core.config import KEYCLOAK_URL, KEYCLOAK_REALM
@@ -24,6 +26,14 @@ class RegisterRequest(BaseModel):
     requested_role: str = "student"
     first_name:     str = ""
     last_name:      str = ""
+
+
+class TOTPConfirmRequest(BaseModel):
+    code: str
+
+
+class TOTPVerifyRequest(BaseModel):
+    code: str
 
 
 # ── Register ───────────────────────────────────────────────────────────────
@@ -63,11 +73,11 @@ async def register(
         requested_role = body.requested_role,
         is_approved    = False,
         is_active      = True,
+        totp_enabled   = False,
     )
     db.add(new_user)
     await db.flush()
 
-    # ── Audit chain entry ──────────────────────────────────────────────────
     await write_audit_entry(
         db         = db,
         action     = "register",
@@ -78,7 +88,7 @@ async def register(
             "username":       body.username,
             "email":          body.email,
             "requested_role": body.requested_role,
-            "status":         "pending"
+            "status":         "pending",
         }
     )
     await db.commit()
@@ -90,12 +100,60 @@ async def register(
     }
 
 
+# ── Admin: approve user ────────────────────────────────────────────────────
+
+@router.post("/admin/approve/{user_id}")
+async def approve_user(
+    user_id: str,
+    request: Request,
+    db:      AsyncSession = Depends(get_db),
+    admin:   User         = Depends(require_admin),
+):
+    result = await db.execute(select(User).where(User.user_id == user_id))
+    target = result.scalar_one_or_none()
+
+    if target is None:
+        raise HTTPException(404, "User not found")
+    if target.is_approved:
+        raise HTTPException(400, "User is already approved")
+
+    # Generate temp secret now — totp_enabled stays False until user confirms
+    secret = pyotp.random_base32()
+    target.temp_totp_secret = secret
+    target.totp_enabled     = False
+    target.is_approved      = True
+
+    if target.requested_role and target.requested_role != target.role:
+        target.role = target.requested_role
+
+    await write_audit_entry(
+        db         = db,
+        action     = "role_change",
+        result     = "success",
+        user_id    = target.user_id,
+        ip_address = request.client.host if request.client else None,
+        detail     = {
+            "approved_by":       admin.username,
+            "new_role":          target.role,
+            "totp_secret_ready": True,
+            "totp_active":       False,
+            "note":              "User must scan QR and confirm before TOTP activates",
+        }
+    )
+    await db.commit()
+
+    return {
+        "message":     f"User '{target.username}' approved.",
+        "role":        target.role,
+        "totp_status": "pending_user_setup",
+        "next_step":   "User must complete TOTP setup on first login.",
+    }
+
+
 # ── Me ─────────────────────────────────────────────────────────────────────
 
 @router.get("/me", response_model=UserResponse)
-async def get_me(
-    current_user: User = Depends(get_current_user)
-):
+async def get_me(current_user: User = Depends(get_current_user)):
     return UserResponse.model_validate(current_user)
 
 
@@ -107,7 +165,6 @@ async def logout(
     current_user: User         = Depends(get_current_user),
     db:           AsyncSession = Depends(get_db),
 ):
-    # ── Audit chain entry ──────────────────────────────────────────────────
     await write_audit_entry(
         db         = db,
         action     = "logout",
@@ -127,28 +184,138 @@ async def logout(
     }
 
 
-# POST /auth/totp/verify  — called after CARTA triggers MFA
+# ── TOTP Setup — Step 1: Show QR ───────────────────────────────────────────
+
+@router.get("/totp/setup")
+async def get_totp_setup(
+    current_user: User         = Depends(get_current_user),
+    db:           AsyncSession = Depends(get_db),
+):
+    if current_user.totp_enabled and current_user.totp_secret:
+        return {"already_configured": True}
+
+    # Safety net — regenerate if missing (e.g. legacy account)
+    if not current_user.temp_totp_secret:
+        current_user.temp_totp_secret = pyotp.random_base32()
+        await db.commit()
+        await db.refresh(current_user)
+
+    totp = pyotp.TOTP(current_user.temp_totp_secret)
+    uri  = totp.provisioning_uri(
+        name        = current_user.email,
+        issuer_name = "HPC-Gateway"
+    )
+    img    = qrcode.make(uri)
+    buf    = io.BytesIO()
+    img.save(buf, format="PNG")
+    qr_b64 = base64.b64encode(buf.getvalue()).decode()
+
+    return {
+        "already_configured": False,
+        "qr_code": f"data:image/png;base64,{qr_b64}",
+        "secret":  current_user.temp_totp_secret,
+        "instructions": (
+            "1. Open Google Authenticator. "
+            "2. Scan the QR code or enter the secret manually. "
+            "3. POST {\"code\": \"123456\"} to /auth/totp/confirm-setup."
+        ),
+    }
+
+
+# ── TOTP Setup — Step 2: Confirm scan ─────────────────────────────────────
+# FIX: body is JSON, not a query param.
+# Before: POST /totp/confirm-setup?code=123456  → 422 Unprocessable Entity
+# After:  POST /totp/confirm-setup
+#         Content-Type: application/json
+#         {"code": "123456"}              → 200 OK
+
+@router.post("/totp/confirm-setup")
+async def confirm_totp_setup(
+    body:         TOTPConfirmRequest,   # ← JSON body, NOT a query param
+    request:      Request,
+    current_user: User         = Depends(get_current_user),
+    db:           AsyncSession = Depends(get_db),
+):
+    if not current_user.temp_totp_secret:
+        raise HTTPException(
+            400,
+            "No pending TOTP setup found. Call GET /auth/totp/setup first."
+        )
+
+    if current_user.totp_enabled:
+        raise HTTPException(400, "Authenticator is already configured.")
+
+    totp = pyotp.TOTP(current_user.temp_totp_secret)
+    if not totp.verify(body.code, valid_window=1):
+        await write_audit_entry(
+            db         = db,
+            action     = "login",
+            result     = "totp_setup_failed",
+            user_id    = current_user.user_id,
+            ip_address = request.client.host if request.client else None,
+            detail     = {"reason": "invalid_code_during_setup"}
+        )
+        await db.commit()
+        raise HTTPException(
+            401,
+            "Invalid code. Make sure your phone's time is correct and try again."
+        )
+
+    # ✅ Verified — promote temp → permanent and activate
+    current_user.totp_secret      = current_user.temp_totp_secret
+    current_user.temp_totp_secret = None
+    current_user.totp_enabled     = True
+
+    await write_audit_entry(
+        db         = db,
+        action     = "login",
+        result     = "totp_setup_confirmed",
+        user_id    = current_user.user_id,
+        ip_address = request.client.host if request.client else None,
+        detail     = {"method": "totp_setup", "status": "activated"}
+    )
+    await db.commit()
+
+    return {
+        "message": (
+            "Authenticator successfully configured. "
+            "Two-factor authentication is now active on your account."
+        )
+    }
+
+
+# ── TOTP Verify — step-up MFA for risky job submissions ───────────────────
+# FIX: use get_current_user_and_token so we have the token to look up
+#      the session and stamp totp_verified_at on it.
+
 @router.post("/totp/verify")
 async def verify_totp(
-    request:      Request,
-    code:         str,
-    current_user: User         = Depends(get_current_user),
-    db:           AsyncSession = Depends(get_db)
+    body:                  TOTPVerifyRequest,
+    request:               Request,
+    current_user_and_token = Depends(get_current_user_and_token),  # ← FIXED
+    db:                    AsyncSession = Depends(get_db),
 ):
-    if not current_user.totp_secret:
-        raise HTTPException(400, "TOTP not configured.")
+    current_user, token = current_user_and_token
 
-    import pyotp
+    if not current_user.totp_enabled or not current_user.totp_secret:
+        raise HTTPException(
+            400,
+            "Authenticator not configured. "
+            "Please complete setup at /auth/totp/setup first."
+        )
+
     totp = pyotp.TOTP(current_user.totp_secret)
-    if not totp.verify(code, valid_window=1):
-        raise HTTPException(401, "Invalid TOTP code")
+    if not totp.verify(body.code, valid_window=1):
+        raise HTTPException(401, "Invalid code. Check your authenticator app.")
 
-    # Mark device/IP as verified after successful MFA
-    from app.core.carta import mark_ip_verified
+    # Stamp the session so jobs.py knows MFA was recently verified
+    from app.core.carta import get_or_create_session, mark_ip_verified
+    session = await get_or_create_session(current_user, token, request, db)
+    session.totp_verified_at = datetime.now(timezone.utc)  # ← stamps the session
+
     ip = request.client.host if request.client else "unknown"
     await mark_ip_verified(current_user.user_id, ip, db)
 
-    # Write audit entry
     await write_audit_entry(
         db         = db,
         action     = "login",
@@ -159,34 +326,7 @@ async def verify_totp(
     )
     await db.commit()
 
-    return {"verified": True, "message": "MFA verified. IP registered as trusted."}
-
-@router.get("/totp/setup")
-async def get_totp_setup(
-    current_user: User         = Depends(get_current_user),
-    db:           AsyncSession = Depends(get_db)
-):
-    """Returns QR code for TOTP setup. Called on first login."""
-    import pyotp, qrcode, io, base64
-
-    if not current_user.totp_secret:
-        # Generate new secret
-        current_user.totp_secret = pyotp.random_base32()
-        await db.commit()
-
-    totp = pyotp.TOTP(current_user.totp_secret)
-    uri  = totp.provisioning_uri(
-        name        = current_user.email,
-        issuer_name = "HPC-Gateway"
-    )
-
-    img    = qrcode.make(uri)
-    buf    = io.BytesIO()
-    img.save(buf, format="PNG")
-    qr_b64 = base64.b64encode(buf.getvalue()).decode()
-
     return {
-        "qr_code":    f"data:image/png;base64,{qr_b64}",
-        "secret":     current_user.totp_secret,
-        "configured": True
+        "verified": True,
+        "message":  "MFA verified. IP registered as trusted.",
     }

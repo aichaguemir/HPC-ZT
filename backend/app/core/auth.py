@@ -16,7 +16,6 @@ from app.core.logging import logger
 from app.core.carta import get_or_create_session, register_ip
 
 
-
 # ── OAuth2 scheme ──────────────────────────────────────────────────────────
 oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl=f"{KEYCLOAK_URL}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/token"
@@ -24,6 +23,14 @@ oauth2_scheme = OAuth2PasswordBearer(
 
 # ── Public key cache ───────────────────────────────────────────────────────
 _jwks_cache: Optional[dict] = None
+
+# ── Paths allowed before TOTP setup is confirmed ──────────────────────────
+TOTP_SETUP_ALLOWED_PATHS = {
+    "/auth/totp/setup",
+    "/auth/totp/confirm-setup",
+    "/auth/me",
+    "/auth/logout",
+}
 
 
 async def get_keycloak_public_keys() -> dict:
@@ -94,7 +101,6 @@ async def get_current_user(
     user = result.scalar_one_or_none()
 
     if user is None:
-        # Auto-create on first login — pending approval
         user = User(
             keycloak_id    = keycloak_id,
             username       = username,
@@ -103,6 +109,7 @@ async def get_current_user(
             requested_role = user_role,
             is_approved    = False,
             is_active      = True,
+            totp_enabled   = False,
         )
         db.add(user)
         await db.flush()
@@ -117,7 +124,6 @@ async def get_current_user(
         logger.info(f"New user from Keycloak: {username} ({user_role})")
 
     else:
-        # Sync role if changed in Keycloak
         if user.role != user_role:
             old_role  = user.role
             user.role = user_role
@@ -138,16 +144,38 @@ async def get_current_user(
         raise HTTPException(403,
             "Account pending admin approval. "
             "Please wait for an administrator to approve your registration.")
-            
-            
-    # Register IP on every authenticated request
+
+    # ── Step 5 — TOTP gate ────────────────────────────────────────────────
+    # FIX: Admins are EXEMPT from the TOTP gate.
+    # Admin accounts are pre-existing and were created before this flow.
+    # Blocking them would lock out the entire system with no recovery path.
+    # All non-admin approved users MUST complete TOTP setup before proceeding.
+    if user.role != "admin" and not user.totp_enabled:
+        path    = request.url.path.rstrip("/")
+        allowed = any(path.endswith(p) for p in TOTP_SETUP_ALLOWED_PATHS)
+        if not allowed:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "code":        "totp_setup_required",
+                    "message":     (
+                        "You must set up two-factor authentication before "
+                        "continuing. Visit /auth/totp/setup, scan the QR code, "
+                        "then confirm at /auth/totp/confirm-setup."
+                    ),
+                    "setup_url":   "/auth/totp/setup",
+                    "confirm_url": "/auth/totp/confirm-setup",
+                }
+            )
+
+    # Step 6 — Register IP on every authenticated request
     if request and request.client:
         await register_ip(
             user_id  = user.user_id,
             ip       = request.client.host,
             db       = db,
             verified = False,
-        )     
+        )
 
     return user
 
@@ -158,7 +186,7 @@ async def get_current_user_and_token(
     db: AsyncSession = Depends(get_db),
 ):
     user = await get_current_user(request, token, db)
-    return user, token  # <-- tuple
+    return user, token
 
 
 # ── Admin-only dependency ──────────────────────────────────────────────────
