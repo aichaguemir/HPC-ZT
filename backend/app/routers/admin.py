@@ -16,7 +16,7 @@ from app.core.keycloak_admin import (
 from app.core.audit_chain import write_audit_entry, verify_chain
 from app.core.carta import get_known_ips
 from app.db.session import get_db
-from app.db.models import User, AuditLog, UserKnownIP
+from app.db.models import User, AuditLog, UserKnownIP, Job
 from app.services.ssh import run_ssh_async
 from app.core.config import LSF_PATH, KEYCLOAK_URL, KEYCLOAK_REALM
 from app.core.logging import logger
@@ -432,4 +432,39 @@ async def get_audit_logs(
             }
             for l, username in rows
         ]
+    }
+    
+
+
+# ── Flagged jobs ───────────────────────────────────────────────────────────
+
+@router.get("/jobs/flagged")
+async def list_flagged_jobs(
+    db:           AsyncSession = Depends(get_db),
+    current_user: User         = Depends(require_admin),
+):
+    result = await db.execute(
+        select(Job, User.username)
+        .join(User, Job.user_id == User.user_id)
+        .where(Job.is_flagged == True)
+        .order_by(Job.flagged_at.desc())
+    )
+    rows = result.all()
+
+    return {
+        "total": len(rows),
+        "flagged_jobs": [
+            {
+                "job_id":       job.job_id,
+                "username":     username,
+                "queue":        job.queue,
+                "cores":        job.cores,
+                "memory":       job.memory,
+                "status":       job.status,
+                "flag_reason":  job.flag_reason,
+                "flagged_at":   str(job.flagged_at),
+                "submitted_at": str(job.submitted_at),
+            }
+            for job, username in rows
+        ],
     }
