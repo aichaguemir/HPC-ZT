@@ -81,6 +81,10 @@ class User(Base):
     is_active       : Mapped[bool]     = mapped_column(Boolean, default=True, nullable=False)
     is_approved    : Mapped[bool]      = mapped_column(Boolean, default=False, nullable=False)
     requested_role : Mapped[str]       = mapped_column(String, nullable=True)
+    totp_secret    : Mapped[str] = mapped_column(String, nullable=True)
+    totp_enabled   :  Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    temp_totp_secret: Mapped[str] = mapped_column(String, nullable=True)
+
     failed_attempts : Mapped[int]      = mapped_column(Integer, default=0, nullable=False)
     locked_until    : Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at      : Mapped[datetime] = mapped_column(DateTime(timezone=True),
@@ -207,6 +211,7 @@ class Session(Base):
     revoke_reason : Mapped[str]      = mapped_column(REVOKE_REASON_TYPE, nullable=True)
     risk_score    : Mapped[int] = mapped_column(Integer, default=0)
     peak_risk     : Mapped[int] = mapped_column(Integer, default=0)
+    totp_verified_at : Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
 
     user = relationship("User", back_populates="sessions")
 

@@ -22,13 +22,15 @@ from app.validators.script import validate_script
 from app.services.ssh import run_ssh_async, transfer_files
 from app.services.lsf import generate_lsf, generate_sandbox_wrapper
 from app.core.carta import run_carta, apply_carta_result, get_or_create_session
-from app.core.auth import oauth2_scheme,get_current_user_and_token 
+from app.core.auth import oauth2_scheme, get_current_user_and_token
 from sqlalchemy import update
 from app.core.audit_chain import write_audit_entry
 from app.core.config import KEYCLOAK_URL, KEYCLOAK_REALM, KEYCLOAK_CLIENT_ID
 
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
+
+MFA_GRACE_MINUTES = 15   # how long a TOTP verification stamp is valid
 
 
 # ── Helper: load policy for user ───────────────────────────────────────────
@@ -42,9 +44,11 @@ async def get_policy(user: User, db: AsyncSession) -> Policy:
         raise HTTPException(503, "Policy not configured for your role. Contact admin.")
     return policy
 
+
 # ==============================
 # SUBMIT
 # ==============================
+
 @router.post("/submit", response_model=JobResponse)
 async def submit_job(
     file:              UploadFile   = File(...),
@@ -58,7 +62,7 @@ async def submit_job(
     current_user_and_token          = Depends(get_current_user_and_token),
 ):
     current_user, token = current_user_and_token
- 
+
     # ① Auto-expire stuck jobs first
     await db.execute(
         update(Job)
@@ -68,14 +72,14 @@ async def submit_job(
         .values(status="EXIT", finished_at=datetime.now(timezone.utc))
     )
     await db.commit()
- 
+
     # ② Read and validate file
     content = await file.read()
     validate_script(file, content)
- 
+
     # ③ Load policy
     policy = await get_policy(current_user, db)
- 
+
     # ④ Validate parameters against policy
     try:
         params = JobSubmitParams(
@@ -86,14 +90,14 @@ async def submit_job(
         )
     except ValueError as e:
         raise HTTPException(400, detail=str(e))
- 
+
     # ⑤ Check queue allowed for role
     allowed_queues = {pq.queue_name for pq in policy.allowed_queues}
     if params.queue not in allowed_queues:
         raise HTTPException(400,
             detail=f"Queue '{params.queue}' not permitted. "
                    f"Allowed: {', '.join(allowed_queues)}")
- 
+
     # ⑥ Check concurrent job quota
     active_result = await db.execute(
         select(func.count(Job.job_id))
@@ -103,7 +107,7 @@ async def submit_job(
     if active_result.scalar() >= policy.max_concurrent_jobs:
         raise HTTPException(429,
             detail=f"Maximum {policy.max_concurrent_jobs} concurrent jobs for your role.")
- 
+
     # ⑦ Check daily quota
     if policy.max_jobs_per_day:
         today_start = datetime.now(timezone.utc).replace(
@@ -116,8 +120,8 @@ async def submit_job(
         if daily_result.scalar() >= policy.max_jobs_per_day:
             raise HTTPException(429,
                 detail=f"Daily job limit of {policy.max_jobs_per_day} reached.")
- 
-    # ⑧ Per-minute rate limit (role-aware, user-based)
+
+    # ⑧ Per-minute rate limit
     RATE_LIMITS = {"student": 5, "researcher": 20, "admin": 60}
     rate_limit  = RATE_LIMITS.get(current_user.role, 5)
     one_min_ago = datetime.now(timezone.utc) - timedelta(seconds=60)
@@ -130,7 +134,7 @@ async def submit_job(
         raise HTTPException(429,
             detail=f"Rate limit exceeded. Max {rate_limit} submissions/minute "
                    f"for {current_user.role} role.")
- 
+
     # ⑨ Insert pending job
     unique_id   = str(uuid.uuid4())
     pending_job = Job(
@@ -152,7 +156,7 @@ async def submit_job(
     )
     db.add(pending_job)
     await db.flush()
- 
+
     # ⑩ CARTA risk evaluation
     session      = await get_or_create_session(current_user, token, request, db)
     carta_result = await run_carta(
@@ -164,7 +168,16 @@ async def submit_job(
         session = session,
     )
     await apply_carta_result(pending_job, carta_result, db)
-    logger.info(f"CARTA DEBUG: request={carta_result['request_score']} session={carta_result['session_score']} action={carta_result['action']['action']}      signals={carta_result['signals']}") 
+
+    logger.info(
+        f"CARTA: user={current_user.username} "
+        f"request={carta_result['request_score']} "
+        f"session={carta_result['session_score']} "
+        f"action={carta_result['action']['action']} "
+        f"signals={carta_result['signals']}"
+    )
+
+    # ── Score ≥ 80 — hard block, no MFA bypass ────────────────────────────
     if carta_result["action"]["action"] == "block":
         await db.delete(pending_job)
         await db.commit()
@@ -182,81 +195,104 @@ async def submit_job(
         )
         await db.commit()
         raise HTTPException(403, detail={
-            "message":    "Job blocked — risk score too high",
+            "message":    "Job blocked — risk score critical. Contact your administrator.",
             "risk_score": carta_result["session_score"],
             "signals":    carta_result["signals"],
         })
- 
-    # ⑫ MFA required if high risk
+
+    # ── Score 40-79 — MFA required, but respect recent verification ───────
+    # FIX: the entire block (grace check + raise) is inside the if.
+    # Before: already_verified was defined inside the if but used outside it
+    #         → NameError on every non-flag_and_mfa action.
     if carta_result["action"]["action"] == "flag_and_mfa":
-        await db.delete(pending_job)
-        await db.commit()
-        await write_audit_entry(
-            db         = db,
-            action     = "job_submit",
-            result     = "mfa_required",
-            user_id    = current_user.user_id,
-            ip_address = request.client.host if request and request.client else None,
-            detail     = {
-                "reason":      "high_risk",
-                "carta_score": carta_result["session_score"],
-                "signals":     carta_result["signals"],
-            }
+        # Check if user already verified TOTP within the grace window
+        already_verified = (
+            session.totp_verified_at is not None
+            and (datetime.now(timezone.utc) - session.totp_verified_at)
+                < timedelta(minutes=MFA_GRACE_MINUTES)
         )
-        await db.commit()
-        raise HTTPException(403, detail={
-            "status":     "mfa_required",
-            "risk_score": carta_result["session_score"],
-            "signals":    carta_result["signals"],
-            "message":    "Step-up authentication required. Complete MFA and resubmit.",
-            "reauth_url": (
-                f"{KEYCLOAK_URL}/realms/{KEYCLOAK_REALM}"
-                f"/protocol/openid-connect/auth"
-                f"?client_id={KEYCLOAK_CLIENT_ID}"
-                f"&response_type=code&scope=openid&acr_values=gold"
+
+        if not already_verified:
+            # Block this submission and demand step-up MFA
+            await db.delete(pending_job)
+            await db.commit()
+            await write_audit_entry(
+                db         = db,
+                action     = "job_submit",
+                result     = "mfa_required",
+                user_id    = current_user.user_id,
+                ip_address = request.client.host if request and request.client else None,
+                detail     = {
+                    "reason":      "high_risk",
+                    "carta_score": carta_result["session_score"],
+                    "signals":     carta_result["signals"],
+                }
             )
-        })
- 
+            await db.commit()
+            raise HTTPException(403, detail={
+                "status":     "mfa_required",
+                "risk_score": carta_result["session_score"],
+                "signals":    carta_result["signals"],
+                "message":    (
+                    "Step-up authentication required. "
+                    "POST {\"code\": \"<6-digit>\"} to /auth/totp/verify, "
+                    "then resubmit your job."
+                ),
+            })
+        # already_verified=True → fall through and allow the submission
+        logger.info(
+            f"CARTA flag_and_mfa bypassed — MFA verified "
+            f"within {MFA_GRACE_MINUTES}m: user={current_user.username}"
+        )
+
+    # ── Score 20-39 — flagged in DB but submission allowed ────────────────
+    # apply_carta_result() already set is_flagged=True on the job above.
+    # Nothing extra to do here, just fall through.
+
+    # ── Score < 20 — clean, allow ─────────────────────────────────────────
+
     # ⑬ Write files, transfer, submit to LSF
     with tempfile.TemporaryDirectory() as tmpdir:
-        local_script  = os.path.join(tmpdir, f"script_{unique_id}.py")
-        local_lsf     = os.path.join(tmpdir, f"job_{unique_id}.lsf")
-        local_sandbox = os.path.join(tmpdir, f"sandbox_{unique_id}.py")
- 
+        local_script = os.path.join(tmpdir, f"script_{unique_id}.py")
+        local_lsf    = os.path.join(tmpdir, f"job_{unique_id}.lsf")
+
+        with open(local_script, "wb") as f:
+            f.write(content)
+
+        sandbox_wrapper = generate_sandbox_wrapper(
+            script_path = f"script_{unique_id}.py",
+            unique_id   = unique_id,
+        )
+        lsf_script = generate_lsf(
+            job_name    = f"job_{unique_id}",
+            queue       = params.queue,
+            cores       = params.cores,
+            memory      = params.memory,
+            wall_time   = f"{params.wall_time_hours:02d}:{params.wall_time_minutes:02d}",
+            output_file = f"output_{unique_id}.log",
+            error_file  = f"error_{unique_id}.log",
+            script_body = sandbox_wrapper,
+        )
+        with open(local_lsf, "w") as f:
+            f.write(lsf_script)
+
+        remote_dir = f"{REMOTE_JOB_DIR}/users/{current_user.username}/job_{unique_id}"
+        await run_ssh_async(f"mkdir -p {remote_dir}")
+        await transfer_files(
+            local_paths  = [local_script, local_lsf],
+            remote_dir   = remote_dir,
+        )
+
         try:
-            with open(local_script, "wb") as f:
-                f.write(content)
- 
-            with open(local_sandbox, "w") as f:
-                f.write(generate_sandbox_wrapper(unique_id))
- 
-            with open(local_lsf, "w") as f:
-                f.write(generate_lsf(
-                    unique_id, current_user.username,
-                    params.cores, params.memory, params.queue,
-                    params.wall_time_hours, params.wall_time_minutes,
-                ))
- 
-            await transfer_files(local_script, local_lsf, local_sandbox, unique_id)
- 
-            safe_path = REMOTE_JOB_DIR if REMOTE_JOB_DIR.startswith('/') else f"/{REMOTE_JOB_DIR}"
-            safe_path = safe_path.rstrip('/')
- 
-            result = await run_ssh_async(
-                f"{LSF_PATH}/bsub < {safe_path}/job_{unique_id}.lsf"
+            submit_output = await run_ssh_async(
+                f"cd {remote_dir} && {LSF_PATH}/bsub < job_{unique_id}.lsf"
             )
- 
-            match = re.search(r"Job <(\d+)>", result)
-            if not match:
-                raise HTTPException(500, detail=f"Job submission failed: {result}")
- 
-            job_id = match.group(1)
- 
-            # Update DB with real LSF job ID
+            match  = re.search(r"Job <(\d+)>", submit_output)
+            job_id = match.group(1) if match else f"unknown_{unique_id}"
+
             pending_job.job_id = job_id
             await db.commit()
- 
-            # ⑭ Audit chain entry
+
             await write_audit_entry(
                 db         = db,
                 action     = "job_submit",
@@ -265,24 +301,23 @@ async def submit_job(
                 job_id     = job_id,
                 ip_address = request.client.host if request and request.client else None,
                 detail     = {
+                    "queue":         params.queue,
                     "cores":         params.cores,
                     "memory":        params.memory,
-                    "queue":         params.queue,
-                    "script":        file.filename,
                     "carta_score":   carta_result["session_score"],
                     "carta_signals": carta_result["signals"],
                     "carta_level":   carta_result["level"],
                 }
             )
             await db.commit()
- 
+
             logger.info(
                 f"Job submitted: job_id={job_id} "
                 f"user={current_user.username} "
                 f"cores={params.cores} queue={params.queue} "
                 f"carta_score={carta_result['session_score']}"
             )
- 
+
             return JobResponse(
                 job_id          = job_id,
                 status          = JobStatus.PEND.value,
@@ -294,11 +329,12 @@ async def submit_job(
                 memory          = params.memory,
                 queue           = params.queue,
             )
- 
+
         except Exception:
             await db.delete(pending_job)
             await db.commit()
             raise
+
 
 # ==============================
 # STATUS
@@ -445,7 +481,7 @@ async def cancel_job(
     if job is None:
         raise HTTPException(404, "Job not found")
 
-    lsf_result   = await run_ssh_async(f"{LSF_PATH}/bkill {job_id}")
+    lsf_result      = await run_ssh_async(f"{LSF_PATH}/bkill {job_id}")
     job.status       = "EXIT"
     job.cancelled_by = current_user.user_id
     job.finished_at  = datetime.now(timezone.utc)
