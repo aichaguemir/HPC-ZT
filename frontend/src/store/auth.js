@@ -1,12 +1,11 @@
 // src/store/auth.js
-// Real Keycloak token management
 
 const KEYCLOAK_URL    = "http://localhost:8080";
 const KEYCLOAK_REALM  = "HPC-Project";
 const KEYCLOAK_CLIENT = "hpc-backend";
-const API_URL         = "http://localhost:8000/api/v1";
+const API_URL          = "http://localhost:8000/api/v1";
 
-// ── Token storage ──────────────────────────────────────────────────────────
+// ── Token & User Storage ──────────────────────────────────────────────────
 
 export const saveToken = (token) => {
   sessionStorage.setItem("access_token", token);
@@ -16,7 +15,6 @@ export const getToken = () => {
   return sessionStorage.getItem("access_token");
 };
 
-
 export const saveRefreshToken = (token) => {
   sessionStorage.setItem("refresh_token", token);
 };
@@ -24,7 +22,6 @@ export const saveRefreshToken = (token) => {
 export const getRefreshToken = () => {
   return sessionStorage.getItem("refresh_token");
 };
-// -------------------------------------------
 
 export const removeToken = () => {
   sessionStorage.removeItem("access_token");
@@ -45,7 +42,29 @@ export const isAuthenticated = () => {
   return !!getToken();
 };
 
-// ── Login via Keycloak direct grant ───────────────────────────────────────
+// ── User Profile Refresh (جديدة ومهِمة للـ MFA) ──────────────────────────
+// هاد الدالة تعاود تجيب معلومات اليوزر من الباكايند باش نحدثو totp_enabled
+export const refreshUserProfile = async () => {
+  const token = getToken();
+  if (!token) return null;
+
+  try {
+    const response = await fetch(`${API_URL}/auth/me`, {
+      headers: { "Authorization": `Bearer ${token}` }
+    });
+    
+    if (response.ok) {
+      const updatedUser = await response.json();
+      saveUser(updatedUser); // نحدثو الـ Storage بالداتا الجديدة
+      return updatedUser;
+    }
+  } catch (err) {
+    console.error("Refresh Profile Error:", err);
+  }
+  return null;
+};
+
+// ── Login via Keycloak ────────────────────────────────────────────────────
 
 export const login = async (username, password) => {
   const params = new URLSearchParams();
@@ -70,10 +89,9 @@ export const login = async (username, password) => {
 
   const data = await response.json();
   saveToken(data.access_token);
-  
-
   if (data.refresh_token) saveRefreshToken(data.refresh_token);
 
+  // مورا الـ Login، نطلبو الـ Profile من FastAPI
   const meResponse = await fetch(`${API_URL}/auth/me`, {
     headers: { "Authorization": `Bearer ${data.access_token}` }
   });
@@ -89,11 +107,12 @@ export const login = async (username, password) => {
   }
 
   const user = await meResponse.json();
-  saveUser(user);
+  saveUser(user); 
+  // هنا الـ user راح يكون فيه: role, is_approved, totp_enabled
   return user;
 };
 
-// ── Silent Refresh Logic (زدتلك هاد الدالة المهمة) ──────────────────────────
+// ── Silent Refresh Logic ──────────────────────────────────────────────────
 
 export const refreshToken = async () => {
   const refresh = getRefreshToken();
@@ -101,9 +120,9 @@ export const refreshToken = async () => {
 
   try {
     const params = new URLSearchParams();
-    params.append("client_id",     KEYCLOAK_CLIENT);
-    params.append("grant_type",    "refresh_token");
-    params.append("refresh_token", refresh);
+    params.append("client_id",      KEYCLOAK_CLIENT);
+    params.append("grant_type",     "refresh_token");
+    params.append("refresh_token",  refresh);
 
     const response = await fetch(
       `${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token`,
@@ -122,11 +141,12 @@ export const refreshToken = async () => {
     
     return true;
   } catch (err) {
-    console.error("Refresh Token Error:", err);
     return false;
   }
 };
-// ── USERS & LOGS FUNCTIONS  ───────────────────────────────────
+
+// ── Admin Functions ───────────────────────────────────────────────────────
+
 export const getAllUsers = async () => {
   const token = getToken();
   const response = await fetch(`${API_URL}/admin/users`, {
@@ -135,7 +155,6 @@ export const getAllUsers = async () => {
   if (!response.ok) throw new Error("Failed to fetch users");
   return await response.json();
 };
-
 
 export const getSystemLogs = async () => {
   const token = getToken();
@@ -146,7 +165,7 @@ export const getSystemLogs = async () => {
   return await response.json();
 };
 
-// ── Register via your FastAPI backend ─────────────────────────────────────
+// ── Register ──────────────────────────────────────────────────────────────
 
 export const register = async (formData) => {
   const response = await fetch(`${API_URL}/auth/register`, {
@@ -163,15 +182,11 @@ export const register = async (formData) => {
   });
 
   const data = await response.json();
-
-  if (!response.ok) {
-    throw new Error(data.detail || "Registration failed");
-  }
-
+  if (!response.ok) throw new Error(data.detail || "Registration failed");
   return data;
 };
 
-// ── Logout ─────────────────────────────────────────────────────────────────
+// ── Logout ────────────────────────────────────────────────────────────────
 
 export const logout = async () => {
   const token = getToken();
@@ -181,9 +196,7 @@ export const logout = async () => {
         method:  "POST",
         headers: { "Authorization": `Bearer ${token}` }
       });
-    } catch (e) {
-      // ignore logout errors
-    }
+    } catch (e) { /* ignore */ }
   }
   removeToken();
   window.location.href = "/login";

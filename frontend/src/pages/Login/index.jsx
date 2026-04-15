@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-
 import { login } from "../../store/auth"; 
 
 export default function Login() {
@@ -17,21 +16,16 @@ export default function Login() {
     setError("");
 
     try {
-     
+      // 1. عيطي للدالة تاع الـ Login
       const user = await login(username, password);
 
-      
-      if (user.role === "admin") {
-        navigate("/");
-      } else {
-        navigate("/");
-      }
-
-     
-      window.location.reload();
+      // 2. التوجيه (Navigation)
+      // ملاحظة: الـ ProtectedRoute في App.jsx هو اللي راح يشوف 
+      // إذا يبعثه لـ /mfa-setup (إذا كان جديد) أو للـ Dashboard (/).
+      navigate("/");
 
     } catch (err) {
-     
+      // 3. التعامل مع حالة عدم القبول من الأدمين
       if (err.message === "PENDING_APPROVAL") {
         navigate("/pending-approval");
       } else {
@@ -48,10 +42,10 @@ export default function Login() {
         <h2>Login</h2>
         
         {error && (
-  <p className="error-message" style={{ textAlign: 'center', marginBottom: '15px', color: '#dc2626' }}>
-    {error}
-  </p>
-)}
+          <p className="error-message" style={{ textAlign: 'center', marginBottom: '15px', color: '#dc2626' }}>
+            {error}
+          </p>
+        )}
         
         <form onSubmit={handleSubmit}>
           <label>Username</label>
@@ -65,17 +59,25 @@ export default function Login() {
           />
 
           <label>Password</label>
-          <div className="password-field" style={{ marginBottom: "20px" }}>
+          <div className="password-field" style={{ marginBottom: "20px", position: "relative" }}>
             <input
               type={showPassword ? "text" : "password"}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
               required
+              style={{ width: "100%" }}
             />
             <span
               className="toggle-eye"
               onClick={() => setShowPassword(!showPassword)}
+              style={{
+                position: "absolute",
+                right: "10px",
+                top: "50%",
+                transform: "translateY(-50%)",
+                cursor: "pointer"
+              }}
             >
               {showPassword ? (
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="20" height="20">
@@ -91,12 +93,12 @@ export default function Login() {
             </span>
           </div>
 
-          <button type="submit" disabled={loading}>
+          <button type="submit" disabled={loading} style={{ width: "100%", padding: "10px" }}>
             {loading ? "Verifying..." : "Login"}
           </button>
         </form>
 
-        <p style={{ marginTop: "15px" }}>
+        <p style={{ marginTop: "15px", textAlign: "center" }}>
           Don't have an account? <Link to="/register">Register</Link>
         </p>
       </div>
