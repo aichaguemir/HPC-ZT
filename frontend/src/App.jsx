@@ -5,7 +5,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import AppShell from "./components/layout/AppShell";
 import ProtectedRoute from "./components/ProtectedRoute";
 
-// Auth logic
+// Auth logic from your store
 import { isAuthenticated } from "./store/auth";
 
 // Page Components
@@ -21,60 +21,51 @@ import AuditLog from "./pages/AuditLog/index";
 import Users from "./pages/Users/index";
 import PendingRequests from "./pages/Users/pending/index";
 
-// MFA Components (حسب المسار اللي بعثتيه لي)
-import MfaSetup from "./components/mfa/MfaSetup";
-
 /**
  * Main Application Component
+ * Handles Global Routing and Authentication Guards
  */
 export default function App() {
+  
+  // Checking authentication status from the store
   const isAuth = isAuthenticated();
 
   return (
     <BrowserRouter>
       <Routes>
-        {/* --- 1. PUBLIC ROUTES (Accessible without login) --- */}
+        {/* --- PUBLIC ROUTES --- */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/pending-approval" element={<PendingApproval />} />
 
-        {/* --- 2. MFA SETUP ROUTE --- */}
-     
-        <Route 
-          path="/mfa-setup" 
-          element={
-            <ProtectedRoute>
-               <MfaSetup />
-            </ProtectedRoute>
-          } 
-        />
-
-        {/* --- 3. PROTECTED ROUTES (داخل AppShell والـ Sidebar) --- */}
+        {/* --- PROTECTED ROUTES (WITH LAYOUT) --- */}
         <Route
           path="/"
           element={
-            <ProtectedRoute>
+            isAuth ? (
               <AppShell />
-            </ProtectedRoute>
+            ) : (
+              <Navigate to="/login" replace />
+            )
           }
         >
-          {/* Shared Routes: Student, Researcher, Admin */}
+          {/* 1. SHARED ROUTES: Accessible by Student, Researcher, Admin */}
           <Route index element={<Dashboard />} />
           <Route path="profile" element={<Profile />} />
           <Route path="jobs" element={<JobQueue />} />
           <Route path="submit" element={<SubmitJob />} />
 
-          {/* Elevated Routes: Restricted to Admins/Researchers */}
+          {/* 2. ELEVATED ROUTES: Restricted to Admins and Researchers only */}
           <Route
             path="nodes"
             element={
-              <ProtectedRoute allowedRoles={["admin", "researcher"]}>
+              <ProtectedRoute allowedRoles={["admin"]}>
                 <NodeMap />
               </ProtectedRoute>
             }
           />
 
-          {/* Admin Only Routes: Access Management, Logs */}
+          {/* 3. ADMIN ONLY ROUTES: Access Management, Logs, and Approval queue */}
           <Route
             path="audit"
             element={
@@ -91,6 +82,7 @@ export default function App() {
               </ProtectedRoute>
             }
           />
+          {/* NEW: Admin page to approve new user registrations */}
           <Route
             path="pending"
             element={
@@ -101,7 +93,7 @@ export default function App() {
           />
         </Route>
 
-        {/* --- 4. CATCH-ALL (Redirect to Login) --- */}
+        {/* --- CATCH-ALL ROUTE --- */}
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>
