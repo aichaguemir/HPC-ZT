@@ -1,7 +1,8 @@
 from pydantic import BaseModel, Field, field_validator, model_validator
 from enum import Enum
 from typing import Any
-
+from typing import Optional
+from pydantic import BaseModel, validator
 
 class JobStatus(str, Enum):
     PEND    = "PEND"
@@ -52,7 +53,32 @@ class JobSubmitParams(BaseModel):
     queue:             str
     wall_time_hours:   int
     wall_time_minutes: int
-    policy:            Any = None  # Policy object from DB
+    policy:            Any = None  # Policy object from DB 
+    job_type:          str           = "serial"   # "serial" or "mpi"
+    processes:         Optional[int] = None        # MPI: total processes
+    ptile:             Optional[int] = None        # MPI: processes per node
+    allocation_choice: str           = "wait"      # "wait" or "throttled" 
+    
+    
+    
+    @validator("job_type")
+    def validate_job_type(cls, v):
+        if v not in ("serial", "mpi"):
+            raise ValueError("job_type must be 'serial' or 'mpi'")
+        return v
+ 
+    @validator("processes", always=True)
+    def validate_processes(cls, v, values):
+        if values.get("job_type") == "mpi" and not v:
+            raise ValueError("MPI jobs require processes field")
+        return v
+ 
+    @validator("ptile", always=True)
+    def validate_ptile(cls, v, values):
+        if values.get("job_type") == "mpi" and not v:
+            raise ValueError("MPI jobs require ptile field")
+        return v 
+        
 
     @model_validator(mode='after')
     def validate_against_policy(self):

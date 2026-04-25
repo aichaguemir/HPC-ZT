@@ -1,9 +1,12 @@
 from app.core.config import REMOTE_JOB_DIR
+from typing import Optional
+
+PYTHON_BIN = "/home/mfahci/anaconda3/bin/python3"
 
 
 def generate_sandbox_wrapper(unique_id: str) -> str:
     return f"""import builtins as _b
-
+import os as _os 
 ALLOWED_MODULES = {{
     'math', 'cmath', 'decimal', 'fractions', 'random', 'statistics',
     'itertools', 'functools', 'operator', 'collections', 'heapq',
@@ -30,8 +33,7 @@ SAFE_NAMES = {{
     'staticmethod', 'classmethod', 'property',
     'super', 'object',
     'id', 'hash', 'hex', 'oct', 'bin',
-    'chr', 'ord',
-    'format', 'vars',
+    'chr', 'ord', 'format', 'vars',
     'True', 'False', 'None',
     'NotImplemented', 'Ellipsis',
     'Exception', 'ValueError', 'TypeError', 'ImportError',
@@ -64,9 +66,17 @@ for _name in SAFE_NAMES:
 allowed_builtins['__import__'] = _safe_import
 allowed_builtins['__build_class__'] = _b.__build_class__
 
+_chunk_id     = int(_os.environ.get('LSB_JOBINDEX', '1'))
+_total_chunks = int(_os.environ.get('LSB_JOBINDEX_END', '1'))
+
 with open('{REMOTE_JOB_DIR}/script_{unique_id}.py', 'r') as _f:
-    _code = compile(_f.read(), 'user_script', 'exec')
-    exec(_code, {{'__builtins__': allowed_builtins}})
+    _src = _f.read()
+
+_src = _src.replace('__CHUNK_ID__',     str(_chunk_id))
+_src = _src.replace('__TOTAL_CHUNKS__', str(_total_chunks))
+
+_code = compile(_src, 'user_script', 'exec')
+exec(_code, {{'__builtins__': allowed_builtins}})
 """
 
 
@@ -77,23 +87,50 @@ def generate_lsf(
     memory:            int,
     queue:             str,
     wall_time_hours:   int,
-    wall_time_minutes: int
+    wall_time_minutes: int,
+    job_type:          str           = "serial",
+    chunks:            Optional[int] = None,
+    cores_per_chunk:   Optional[int] = None,
+    target_node:       Optional[str] = None,
 ) -> str:
+    """
+    Generates LSF batch script.
+
+    serial:   single node, span[hosts=1]
+    parallel: job array, span[ptile=cores_per_chunk], LSB_JOBINDEX
+    """
     queue       = queue.strip().lower()
     wall_time   = f"{wall_time_hours:02d}:{wall_time_minutes:02d}"
     total_secs  = (wall_time_hours * 3600) + (wall_time_minutes * 60) + 60
     user_dir    = f"{REMOTE_JOB_DIR}/{username}"
     job_workdir = f"{user_dir}/job_{unique_id}"
+    node_flag   = f'#BSUB -m "{target_node}"' if target_node else ""
+
+    if job_type == "parallel" and chunks and chunks > 1:
+        job_comment  = f"# Parallel job array: {chunks} chunks x {cores_per_chunk} cores"
+        bsub_n       = chunks * cores_per_chunk
+        resource_req = f'rusage[mem={memory}] span[ptile={cores_per_chunk}]'
+        job_name     = f'job_{unique_id}[1-{chunks}]'
+        extra_env    = f"export LSB_JOBINDEX_END={chunks}"
+    else:
+        job_comment  = f"# Serial job: {cores} cores on single node"
+        bsub_n       = cores
+        resource_req = f'rusage[mem={memory}] span[hosts=1]'
+        job_name     = f'job_{unique_id}'
+        extra_env    = ""
 
     script = f"""#!/bin/bash
-#BSUB -J job_{unique_id}
+{job_comment}
+
+#BSUB -J {job_name}
 #BSUB -q {queue}
-#BSUB -n {cores}
-#BSUB -R "rusage[mem={memory}] span[hosts=1]"
+#BSUB -n {bsub_n}
+#BSUB -R "{resource_req}"
 #BSUB -M {memory}
 #BSUB -W {wall_time}
-#BSUB -o {job_workdir}/output_{unique_id}.log
-#BSUB -e {job_workdir}/error_{unique_id}.log
+#BSUB -o {job_workdir}/output_{unique_id}_%I.log
+#BSUB -e {job_workdir}/error_{unique_id}_%I.log
+{node_flag}
 
 cd {job_workdir}
 
@@ -103,7 +140,9 @@ ulimit -u 64
 ulimit -n 256
 ulimit -v 33554432
 
-python3 {REMOTE_JOB_DIR}/sandbox_{unique_id}.py
+{extra_env}
+
+{PYTHON_BIN} {REMOTE_JOB_DIR}/sandbox_{unique_id}.py
 
 rm -f {REMOTE_JOB_DIR}/sandbox_{unique_id}.py
 rm -f {REMOTE_JOB_DIR}/script_{unique_id}.py

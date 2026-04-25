@@ -3,14 +3,15 @@ import uuid
 import os
 import tempfile
 from datetime import datetime, timezone, timedelta
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, update
 
-from app.core.config import LSF_PATH, REMOTE_JOB_DIR
+from app.core.config import LSF_PATH, REMOTE_JOB_DIR, KEYCLOAK_URL, KEYCLOAK_REALM, KEYCLOAK_CLIENT_ID
 from app.core.logging import logger
-from app.core.auth import get_current_user
+from app.core.auth import get_current_user, oauth2_scheme, get_current_user_and_token
 from app.db.session import get_db
 from app.db.models import Job, Policy, PolicyQueue, AuditLog, User
 from app.schemas.jobs import (
@@ -22,11 +23,8 @@ from app.validators.script import validate_script
 from app.services.ssh import run_ssh_async, transfer_files
 from app.services.lsf import generate_lsf, generate_sandbox_wrapper
 from app.core.carta import run_carta, apply_carta_result, get_or_create_session
-from app.core.auth import oauth2_scheme,get_current_user_and_token 
-from sqlalchemy import update
 from app.core.audit_chain import write_audit_entry
-from app.core.config import KEYCLOAK_URL, KEYCLOAK_REALM, KEYCLOAK_CLIENT_ID
-
+from app.core.dynamic_allocation import get_cluster_state, get_allocation_options
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -42,9 +40,11 @@ async def get_policy(user: User, db: AsyncSession) -> Policy:
         raise HTTPException(503, "Policy not configured for your role. Contact admin.")
     return policy
 
-# ==============================
+
+# ══════════════════════════════════════════════════════════════════════════
 # SUBMIT
-# ==============================
+# ══════════════════════════════════════════════════════════════════════════
+
 @router.post("/submit", response_model=JobResponse)
 async def submit_job(
     file:              UploadFile   = File(...),
@@ -53,12 +53,15 @@ async def submit_job(
     queue:             str          = Form(...),
     wall_time_hours:   int          = Form(...),
     wall_time_minutes: int          = Form(...),
+    job_type:          str          = Form("serial"),
+    chunks:            Optional[int]= Form(None),
+    cores_per_chunk:   Optional[int]= Form(None),
     request:           Request      = None,
     db:                AsyncSession = Depends(get_db),
     current_user_and_token          = Depends(get_current_user_and_token),
 ):
     current_user, token = current_user_and_token
- 
+
     # ① Auto-expire stuck jobs first
     await db.execute(
         update(Job)
@@ -68,14 +71,14 @@ async def submit_job(
         .values(status="EXIT", finished_at=datetime.now(timezone.utc))
     )
     await db.commit()
- 
+
     # ② Read and validate file
     content = await file.read()
     validate_script(file, content)
- 
+
     # ③ Load policy
     policy = await get_policy(current_user, db)
- 
+
     # ④ Validate parameters against policy
     try:
         params = JobSubmitParams(
@@ -86,14 +89,14 @@ async def submit_job(
         )
     except ValueError as e:
         raise HTTPException(400, detail=str(e))
- 
+
     # ⑤ Check queue allowed for role
     allowed_queues = {pq.queue_name for pq in policy.allowed_queues}
     if params.queue not in allowed_queues:
         raise HTTPException(400,
             detail=f"Queue '{params.queue}' not permitted. "
                    f"Allowed: {', '.join(allowed_queues)}")
- 
+
     # ⑥ Check concurrent job quota
     active_result = await db.execute(
         select(func.count(Job.job_id))
@@ -103,7 +106,7 @@ async def submit_job(
     if active_result.scalar() >= policy.max_concurrent_jobs:
         raise HTTPException(429,
             detail=f"Maximum {policy.max_concurrent_jobs} concurrent jobs for your role.")
- 
+
     # ⑦ Check daily quota
     if policy.max_jobs_per_day:
         today_start = datetime.now(timezone.utc).replace(
@@ -116,7 +119,7 @@ async def submit_job(
         if daily_result.scalar() >= policy.max_jobs_per_day:
             raise HTTPException(429,
                 detail=f"Daily job limit of {policy.max_jobs_per_day} reached.")
- 
+
     # ⑧ Per-minute rate limit (role-aware, user-based)
     RATE_LIMITS = {"student": 5, "researcher": 20, "admin": 60}
     rate_limit  = RATE_LIMITS.get(current_user.role, 5)
@@ -130,8 +133,25 @@ async def submit_job(
         raise HTTPException(429,
             detail=f"Rate limit exceeded. Max {rate_limit} submissions/minute "
                    f"for {current_user.role} role.")
- 
-    # ⑨ Insert pending job
+
+    # ⑨ Validate parallel job parameters
+    if job_type == "parallel":
+        if current_user.role == "student":
+            raise HTTPException(400,
+                "Parallel jobs require researcher or admin role")
+        if not chunks or chunks < 2:
+            raise HTTPException(400, "Parallel jobs require chunks >= 2")
+        if not cores_per_chunk or cores_per_chunk < 1:
+            raise HTTPException(400, "Parallel jobs require cores_per_chunk >= 1")
+        if chunks * cores_per_chunk > policy.max_cores_per_job:
+            raise HTTPException(400,
+                f"Total cores ({chunks * cores_per_chunk}) exceeds "
+                f"policy limit ({policy.max_cores_per_job}) for {current_user.role} role.")
+        if cores_per_chunk > 16:
+            raise HTTPException(400,
+                "cores_per_chunk cannot exceed 16 (node capacity)")
+
+    # ⑩ Insert pending job
     unique_id   = str(uuid.uuid4())
     pending_job = Job(
         job_id                     = f"pending_{unique_id}",
@@ -152,8 +172,8 @@ async def submit_job(
     )
     db.add(pending_job)
     await db.flush()
- 
-    # ⑩ CARTA risk evaluation
+
+    # ⑪ CARTA risk evaluation
     session      = await get_or_create_session(current_user, token, request, db)
     carta_result = await run_carta(
         job     = pending_job,
@@ -164,8 +184,15 @@ async def submit_job(
         session = session,
     )
     await apply_carta_result(pending_job, carta_result, db)
- 
-    # ⑪ Block if critical risk
+
+    logger.info(
+        f"CARTA: user={current_user.username} "
+        f"score={carta_result['session_score']} "
+        f"action={carta_result['action']['action']} "
+        f"signals={carta_result['signals']}"
+    )
+
+    # ⑫ Block if critical risk
     if carta_result["action"]["action"] == "block":
         await db.delete(pending_job)
         await db.commit()
@@ -187,8 +214,8 @@ async def submit_job(
             "risk_score": carta_result["session_score"],
             "signals":    carta_result["signals"],
         })
- 
-    # ⑫ MFA required if high risk
+
+    # ⑬ MFA required if high risk
     if carta_result["action"]["action"] == "flag_and_mfa":
         await db.delete(pending_job)
         await db.commit()
@@ -217,56 +244,66 @@ async def submit_job(
                 f"&response_type=code&scope=openid&acr_values=gold"
             )
         })
- 
-    # ⑬ Write files, transfer, submit to LSF
+
+    # ⑭ Write files, transfer, submit to LSF
     with tempfile.TemporaryDirectory() as tmpdir:
         local_script  = os.path.join(tmpdir, f"script_{unique_id}.py")
         local_lsf     = os.path.join(tmpdir, f"job_{unique_id}.lsf")
         local_sandbox = os.path.join(tmpdir, f"sandbox_{unique_id}.py")
- 
+
         try:
             with open(local_script, "wb") as f:
                 f.write(content)
- 
+
             with open(local_sandbox, "w") as f:
                 f.write(generate_sandbox_wrapper(unique_id))
- 
+
             with open(local_lsf, "w") as f:
                 f.write(generate_lsf(
                     unique_id, current_user.username,
                     params.cores, params.memory, params.queue,
                     params.wall_time_hours, params.wall_time_minutes,
+                    job_type        = job_type,
+                    chunks          = chunks,
+                    cores_per_chunk = cores_per_chunk,
                 ))
- 
-            await transfer_files(local_script, local_lsf, local_sandbox, unique_id,
-                     current_user.username)
 
-            safe_path    = REMOTE_JOB_DIR if REMOTE_JOB_DIR.startswith('/') else f"/{REMOTE_JOB_DIR}"
-            safe_path    = safe_path.rstrip('/')
-            user_dir     = f"{safe_path}/{current_user.username}"
-            job_workdir  = f"{user_dir}/job_{unique_id}"
+            await transfer_files(
+                local_script, local_lsf, local_sandbox,
+                unique_id, current_user.username
+            )
 
+            safe_path   = REMOTE_JOB_DIR.rstrip('/')
+            user_dir    = f"{safe_path}/{current_user.username}"
+            job_workdir = f"{user_dir}/job_{unique_id}"
 
+            # Create job directory BEFORE bsub so LSF writes output there
             await run_ssh_async(
-            f"mkdir -p {job_workdir} && chmod 700 {job_workdir} && chmod 700 {user_dir}"
+                f"mkdir -p {job_workdir} && "
+                f"chmod 700 {job_workdir} && "
+                f"chmod 700 {user_dir}"
             )
 
             result = await run_ssh_async(
-            f"{LSF_PATH}/bsub < {safe_path}/job_{unique_id}.lsf"
+                f"{LSF_PATH}/bsub < {safe_path}/job_{unique_id}.lsf"
             )
 
- 
+            # Clean up LSF file from cluster
+            await run_ssh_async(
+                f"rm -f {safe_path}/job_{unique_id}.lsf"
+            )
+
             match = re.search(r"Job <(\d+)>", result)
             if not match:
                 raise HTTPException(500, detail=f"Job submission failed: {result}")
- 
+
             job_id = match.group(1)
- 
+
             # Update DB with real LSF job ID
             pending_job.job_id = job_id
             await db.commit()
- 
-            # ⑭ Audit chain entry
+
+            # ⑮ Audit chain entry
             await write_audit_entry(
                 db         = db,
                 action     = "job_submit",
@@ -279,20 +316,23 @@ async def submit_job(
                     "memory":        params.memory,
                     "queue":         params.queue,
                     "script":        file.filename,
+                    "job_type":      job_type,
+                    "chunks":        chunks,
+                    "cores_per_chunk": cores_per_chunk,
                     "carta_score":   carta_result["session_score"],
                     "carta_signals": carta_result["signals"],
                     "carta_level":   carta_result["level"],
                 }
             )
             await db.commit()
- 
+
             logger.info(
                 f"Job submitted: job_id={job_id} "
                 f"user={current_user.username} "
-                f"cores={params.cores} queue={params.queue} "
-                f"carta_score={carta_result['session_score']}"
+                f"type={job_type} "
+                f"cores={params.cores} queue={params.queue}"
             )
- 
+
             return JobResponse(
                 job_id          = job_id,
                 status          = JobStatus.PEND.value,
@@ -304,15 +344,16 @@ async def submit_job(
                 memory          = params.memory,
                 queue           = params.queue,
             )
- 
+
         except Exception:
             await db.delete(pending_job)
             await db.commit()
             raise
 
-# ==============================
+
+# ══════════════════════════════════════════════════════════════════════════
 # STATUS
-# ==============================
+# ══════════════════════════════════════════════════════════════════════════
 
 @router.get("/{job_id}/status", response_model=JobStatusResponse)
 async def get_job_status(
@@ -347,9 +388,9 @@ async def get_job_status(
     )
 
 
-# ==============================
+# ══════════════════════════════════════════════════════════════════════════
 # OUTPUT
-# ==============================
+# ══════════════════════════════════════════════════════════════════════════
 
 @router.get("/{job_id}/output", response_model=JobOutputResponse)
 async def get_job_output(
@@ -366,38 +407,79 @@ async def get_job_output(
     if job is None:
         raise HTTPException(404, "Job not found")
 
-    user_result = await db.execute(select(User).where(User.user_id == job.user_id))
+    user_result = await db.execute(
+        select(User).where(User.user_id == job.user_id)
+    )
     job_user    = user_result.scalar_one_or_none()
     job_workdir = f"{REMOTE_JOB_DIR}/{job_user.username}/job_{job.unique_id}"
 
-    check_cmd = (
+    # ── Try serial output first ────────────────────────────────
+    serial_cmd = (
         f"test -f {job_workdir}/output_{job.unique_id}.log "
         f"&& tail -n 500 {job_workdir}/output_{job.unique_id}.log "
-        f"|| echo 'OUTPUT_NOT_READY'"
+        f"|| echo 'NOT_FOUND'"
     )
+    serial_out = await run_ssh_async(serial_cmd)
 
-    output = await run_ssh_async(check_cmd)
-
-    if output == "OUTPUT_NOT_READY":
-        return JobOutputResponse(
-            job_id=job_id,
-            output="Job output not available yet. Job may still be running."
+    if serial_out.strip() != "NOT_FOUND":
+        output = serial_out
+    else:
+        # ── Try parallel chunk outputs ─────────────────────────
+        # Collect output_{uuid}_1.log, _2.log, etc.
+        chunk_cmd = (
+            f"ls {job_workdir}/output_{job.unique_id}_*.log "
+            f"2>/dev/null | sort -t_ -k1 -V"
         )
+        chunk_files = await run_ssh_async(chunk_cmd)
 
+        if not chunk_files.strip():
+            return JobOutputResponse(
+                job_id=job_id,
+                output="Output not available yet. Job may still be running."
+            )
+
+        # Read each chunk file and combine
+        combined = []
+        for chunk_file in chunk_files.strip().splitlines():
+            chunk_file = chunk_file.strip()
+            if not chunk_file:
+                continue
+            # Extract chunk index from filename
+            idx = chunk_file.split("_")[-1].replace(".log", "")
+            content = await run_ssh_async(
+                f"tail -n 200 {chunk_file} 2>/dev/null || echo ''"
+            )
+            # Strip LSF header boilerplate, keep only actual output
+            marker = "The output (if any) follows:"
+            if marker in content:
+                content = content.split(marker, 1)[1].strip()
+            if content.strip():
+                combined.append(f"=== Chunk {idx} ===\n{content.strip()}")
+
+        if not combined:
+            return JobOutputResponse(
+                job_id=job_id,
+                output="No output produced by any chunk."
+            )
+        output = "\n\n".join(combined)
+
+    # Strip LSF boilerplate from serial output
     marker = "The output (if any) follows:"
     if marker in output:
         output = output.split(marker, 1)[1].strip()
 
-    log = AuditLog(user_id=current_user.user_id, job_id=job_id, action="view_output")
+    log = AuditLog(
+        user_id = current_user.user_id,
+        job_id  = job_id,
+        action  = "view_output"
+    )
     db.add(log)
     await db.commit()
 
     return JobOutputResponse(job_id=job_id, output=output)
-
-
-# ==============================
+# ══════════════════════════════════════════════════════════════════════════
 # ERROR LOG
-# ==============================
+# ══════════════════════════════════════════════════════════════════════════
 
 @router.get("/{job_id}/error", response_model=JobErrorResponse)
 async def get_job_error(
@@ -418,10 +500,13 @@ async def get_job_error(
     job_user    = user_result.scalar_one_or_none()
     job_workdir = f"{REMOTE_JOB_DIR}/{job_user.username}/job_{job.unique_id}"
 
+    # For parallel jobs, collect all chunk errors
     check_cmd = (
-        f"test -f {job_workdir}/error_{job.unique_id}.log "
-        f"&& tail -n 500 {job_workdir}/error_{job.unique_id}.log "
-        f"|| echo 'ERROR_NOT_READY'"
+        f"ls {job_workdir}/error_{job.unique_id}_*.log 2>/dev/null && "
+        f"cat {job_workdir}/error_{job.unique_id}_*.log || "
+        f"test -f {job_workdir}/error_{job.unique_id}.log && "
+        f"tail -n 500 {job_workdir}/error_{job.unique_id}.log || "
+        f"echo 'ERROR_NOT_READY'"
     )
 
     error = await run_ssh_async(check_cmd)
@@ -429,16 +514,21 @@ async def get_job_error(
     if error == "ERROR_NOT_READY":
         return JobErrorResponse(job_id=job_id, error="Error log not created yet.")
 
-    log = AuditLog(user_id=current_user.user_id, job_id=job_id, action="view_error")
-    db.add(log)
+    await write_audit_entry(
+        db         = db,
+        action     = "view_error",
+        result     = "success",
+        user_id    = current_user.user_id,
+        job_id     = job_id,
+    )
     await db.commit()
 
     return JobErrorResponse(job_id=job_id, error=error)
 
 
-# ==============================
+# ══════════════════════════════════════════════════════════════════════════
 # CANCEL
-# ==============================
+# ══════════════════════════════════════════════════════════════════════════
 
 @router.delete("/{job_id}/cancel", response_model=JobCancelResponse)
 async def cancel_job(
@@ -455,27 +545,28 @@ async def cancel_job(
     if job is None:
         raise HTTPException(404, "Job not found")
 
-    lsf_result   = await run_ssh_async(f"{LSF_PATH}/bkill {job_id}")
+    lsf_result       = await run_ssh_async(f"{LSF_PATH}/bkill {job_id}")
     job.status       = "EXIT"
     job.cancelled_by = current_user.user_id
     job.finished_at  = datetime.now(timezone.utc)
 
-    log = AuditLog(
-        user_id = current_user.user_id,
-        job_id  = job_id,
-        action  = "job_cancel",
-        detail  = {"cancelled_by": current_user.username}
+    await write_audit_entry(
+        db         = db,
+        action     = "job_cancel",
+        result     = "success",
+        user_id    = current_user.user_id,
+        job_id     = job_id,
+        detail     = {"cancelled_by": current_user.username}
     )
-    db.add(log)
     await db.commit()
 
     logger.info(f"Job cancelled: job_id={job_id}, by={current_user.username}")
     return JobCancelResponse(job_id=job_id, message="Job cancelled", result=lsf_result)
 
 
-# ==============================
+# ══════════════════════════════════════════════════════════════════════════
 # LIST
-# ==============================
+# ══════════════════════════════════════════════════════════════════════════
 
 @router.get("/")
 async def list_jobs(
@@ -488,8 +579,6 @@ async def list_jobs(
         .order_by(Job.submitted_at.desc())
     )
     jobs = result.scalars().all()
-    if not jobs:
-        return {"jobs": []}
     return {
         "jobs": [
             {
@@ -503,3 +592,47 @@ async def list_jobs(
             for j in jobs
         ]
     }
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# CLUSTER STATE + ALLOCATION OPTIONS
+# ══════════════════════════════════════════════════════════════════════════
+
+@router.get("/cluster/state")
+async def cluster_state(
+    current_user: User = Depends(get_current_user),
+):
+    """Returns current cluster utilization and node status."""
+    state = await get_cluster_state()
+    return {
+        "utilization":  f"{state['utilization']*100:.0f}%",
+        "total_cores":  state["total_cores"],
+        "free_cores":   state["free_cores"],
+        "active_nodes": state["active_nodes"],
+        "total_nodes":  state["total_nodes"],
+        "nodes": [
+            {
+                "host":        n["host"],
+                "free_cores":  n["free_cores"],
+                "utilization": f"{n['utilization']*100:.0f}%",
+                "available":   n["available"],
+            }
+            for n in state["nodes"] if n["available"]
+        ]
+    }
+
+
+@router.post("/options")
+async def allocation_options(
+    cores:        int,
+    memory:       int,
+    job_type:     str  = "serial",
+    current_user: User = Depends(get_current_user),
+):
+    """Returns allocation options based on current cluster state."""
+    return await get_allocation_options(
+        requested_cores  = cores,
+        requested_memory = memory,
+        role             = current_user.role,
+        job_type         = job_type,
+    )
