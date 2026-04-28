@@ -236,3 +236,18 @@ app.include_router(admin_router.router, prefix="/api/v1")
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+# --- كود الـ Health Check للمرحلة الرابعة ---
+
+@app.get("/health")
+def health_check():
+    """
+    هذا المسار مخصص لـ Docker للتأكد من أن التطبيق جاهز.
+    سيعيد حالة 200 OK مما يجعل الـ Container يظهر كـ (healthy).
+    """
+    return {
+        "status": "healthy",
+        "service": "hpc-backend",
+        "version": "1.0.0"
+    }
+
+# ------------------------------------------
