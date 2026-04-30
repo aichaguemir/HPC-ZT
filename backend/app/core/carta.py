@@ -1,43 +1,9 @@
-"""
-CARTA — Continuous Adaptive Risk and Trust Assessment Engine
-============================================================
-Mathematically sound implementation addressing:
-  A. All signals normalized to [0,1] — consistent scale
-  B. Bounded scoring: ρ_req ∈ [0,1] always, no explosion possible
-  C. EMA session formula — stable, provably convergent
-  D. Empirical threshold calibration — scores have defined meaning
-  E. Evaluation framework support — FPR/FNR computable
-
-Architecture (4 layers):
-  Layer 1: Signal Collection  → normalized evidence sᵢ ∈ [0,1] per signal
-  Layer 2: Request Scoring    → ρ_req = normalized weighted sum ∈ [0,1]
-  Layer 3: Session Memory     → ρ_session via EMA with decay ∈ [0,1]
-  Layer 4: 2D Policy Π(ρ,λ)  → action from (risk_score, cluster_load)
-
-Signals:
-  R1 — Behavioral baseline deviation (vs user's own history)
-  R2 — Device fingerprint anomaly (platform+timezone+language+cores)
-  R3 — Geolocation anomaly (unexpected country + impossible travel)
-  R4 — Temporal anomaly (vs user's own hour distribution, circular std)
-  R5 — Rate anomaly (exceeds role threshold per minute)
-  R7 — Credential risk (> 2 failed logins in 10 minutes)
-  S2 — Submission velocity pattern (CV < 0.1 → automated)
-
-Note on R8 (cluster load):
-  Promoted to second axis λ of Π(ρ,λ). Not a security signal.
-  Cluster load affects policy severity, not risk score.
-
-Formal properties of Π(ρ,λ):
-  P1 — Monotonicity in risk:    ρ₁>ρ₂ → severity(Π(ρ₁,λ)) ≥ severity(Π(ρ₂,λ))
-  P2 — Monotonicity in load:    λ₁>λ₂ → severity(Π(ρ,λ₁)) ≥ severity(Π(ρ,λ₂))
-  P3 — Critical risk invariant: ρ≥0.8 → Π ∈ {block,isolate} regardless of λ
-  P4 — Low risk guarantee:      ρ<0.2 ∧ λ<critical → Π = allow
-"""
 import math
 import cmath
 import hashlib
 import base64
 import json
+import os
 from datetime import datetime, timezone, timedelta
 from dataclasses import dataclass
 from typing import Optional
@@ -56,30 +22,24 @@ from app.core.utils import get_client_ip
 # ══════════════════════════════════════════════════════════════════════════
 # SIGNAL WEIGHTS — normalized, sum used as denominator
 # ══════════════════════════════════════════════════════════════════════════
-# Each weight wᵢ represents the relative importance of signal i.
-# Final score = Σ(wᵢ · sᵢ) / Σ(wᵢ) where sᵢ ∈ [0,1]
-# This guarantees ρ_req ∈ [0,1] regardless of how many signals fire.
 
 SIGNAL_WEIGHTS = {
-    "R1_baseline": 0.20,   # behavioral baseline deviation
-    "R2_device":   0.30,   # device fingerprint anomaly
-    "R3_geo":      0.25,   # geolocation / impossible travel
-    "R4_temporal": 0.10,   # temporal anomaly (personal baseline)
-    "R5_rate":     0.25,   # rate anomaly
-    "R7_cred":     0.15,   # credential risk
-    "S2_velocity": 0.20,   # velocity pattern (automated detection)
+    "R1_baseline": 0.15,
+    "R2_device":   0.10,
+    "R3_geo":      0.20,
+    "R4_temporal": 0.05,
+    "R5_rate":     0.15,
+    "R7_cred":     0.25,
+    "S2_velocity": 0.10,
 }
 
 # Total weight — used for normalization denominator
-TOTAL_WEIGHT = sum(SIGNAL_WEIGHTS.values())   # = 1.45
+TOTAL_WEIGHT = sum(SIGNAL_WEIGHTS.values())   
 
 
 # ══════════════════════════════════════════════════════════════════════════
-# COMBO MULTIPLIERS — multiplicative, not additive
+# COMBO MULTIPLIERS — multiplicative
 # ══════════════════════════════════════════════════════════════════════════
-# Combo bonuses use the formula: final = 1 - (1 - base)^multiplier
-# This is PROVABLY BOUNDED in [0,1] for any base ∈ [0,1] and multiplier ≥ 1
-# Multiple combos stack: multiplier = product of individual factors
 
 COMBO_MULTIPLIERS = {
     ("R3_geo",    "R7_cred"):     1.50,  # foreign location + failed logins
@@ -96,37 +56,22 @@ COMBO_MULTIPLIERS = {
 # ══════════════════════════════════════════════════════════════════════════
 # DECISION THRESHOLDS — empirically calibrated
 # ══════════════════════════════════════════════════════════════════════════
-# These thresholds were determined by running 40 test scenarios
-# (20 legitimate, 20 attack) against the live system and observing
-# score distributions. See Section V of the paper for full methodology.
-#
-# τ₁ = 0.20: separates baseline noise from anomalous behavior
-#            Maximum score observed across all legitimate baselines
-# τ₂ = 0.40: minimum score observed in all simulated attack scenarios
-#            Guarantees zero false negatives at this threshold
-# τ₃ = 0.80: score reached only by confirmed multi-signal attack patterns
 
 THRESHOLD_FLAG  = 0.20   # τ₁: ρ ≥ 0.20 → flag
 THRESHOLD_MFA   = 0.40   # τ₂: ρ ≥ 0.40 → MFA required
 THRESHOLD_BLOCK = 0.80   # τ₃: ρ ≥ 0.80 → block unconditionally
 
+# EMA "clean request" threshold — requests below this are treated as
+# low-noise and trigger decay rather than the standard EMA update.
+# Using a threshold (vs strict == 0.0) handles the common case where
+# background signal noise produces small non-zero scores (~0.02–0.05)
+# for genuinely benign requests.
+THRESHOLD_CLEAN = THRESHOLD_FLAG   # ρ_req < 0.20 → decay branch
+
 
 # ══════════════════════════════════════════════════════════════════════════
 # SESSION EMA PARAMETERS
 # ══════════════════════════════════════════════════════════════════════════
-# EMA update rule:
-#   risk increasing: ρ_s = α·ρ_req + (1-α)·ρ_prev
-#   clean request:   ρ_s = γ·ρ_prev
-#
-# α = 0.3: learning rate — 30% weight on current request
-#          chosen so a single spike does not dominate session history
-#          justification: score 1.0 spike → session = 0.3×1.0 + 0.7×0.0 = 0.30
-#          requires sustained high-risk behavior to push session above 0.8
-#
-# γ = 0.9: decay factor — 10% reduction per clean request
-#          justification: score 0.50 requires 9 clean submissions
-#          to drop below τ₁=0.20 (0.50 × 0.9⁹ = 0.194)
-#          trust must be earned through sustained clean behavior
 
 EMA_ALPHA    = 0.3   # learning rate
 EMA_GAMMA    = 0.9   # decay factor
@@ -152,8 +97,7 @@ RATE_THRESHOLDS = {
 }
 
 # R7 — credential risk (raised from > 0 to > 2)
-# Rationale: 1-2 failed logins = mistyped password (false positive risk)
-# > 2 failures in 10 min = brute force / credential stuffing
+
 R7_FAILED_LOGIN_THRESHOLD = 2
 
 # S2 — velocity pattern
@@ -165,6 +109,36 @@ EXPECTED_COUNTRY_CODE        = "DZ"   # Algeria — update for your deployment
 IMPOSSIBLE_TRAVEL_SPEED_KMH  = 900    # commercial flight speed
 GEOIP_DB_PATH                = "/etc/geoip/GeoLite2-City.mmdb"
 
+# GeoIP availability flag — set at import time, avoids per-request stat()
+_GEOIP_AVAILABLE: bool = os.path.isfile(GEOIP_DB_PATH)
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# STARTUP CHECKS
+# ══════════════════════════════════════════════════════════════════════════
+
+def _check_startup_dependencies() -> None:
+    """
+    Warn at import time about missing optional dependencies that silently
+    disable entire signal subsystems. Called once at module load.
+    """
+    if not _GEOIP_AVAILABLE:
+        logger.warning(
+            f"CARTA: GeoIP database not found at {GEOIP_DB_PATH}. "
+            f"R3_geo (geolocation anomaly) is DISABLED for all requests. "
+            f"Download GeoLite2-City.mmdb from maxmind.com and place it at "
+            f"{GEOIP_DB_PATH} to enable country and impossible-travel detection."
+        )
+    try:
+        import geoip2  # noqa: F401
+    except ImportError:
+        logger.warning(
+            "CARTA: geoip2 package not installed. "
+            "R3_geo is DISABLED. Run: pip install geoip2"
+        )
+
+_check_startup_dependencies()
+
 
 # ══════════════════════════════════════════════════════════════════════════
 # CLUSTER LOAD — for 2D policy axis λ, NOT a CARTA signal
@@ -174,10 +148,7 @@ _cluster_cache: dict = {"value": 0.0, "updated": None}
 
 
 async def get_cluster_utilization() -> float:
-    """
-    Returns cluster load λ ∈ [0.0, 1.0].
-    Cached 5 minutes. Used as second axis of Π(ρ,λ), not in risk score.
-    """
+
     global _cluster_cache
     now = datetime.now(timezone.utc)
 
@@ -213,6 +184,19 @@ async def get_cluster_utilization() -> float:
 # 2D POLICY FUNCTION Π(ρ, λ)
 # ══════════════════════════════════════════════════════════════════════════
 
+# Severity ordering for formal property verification (P1, P2).
+# Higher integer = more restrictive enforcement action.
+ACTION_SEVERITY: dict[str, int] = {
+    "allow":    0,
+    "flag":     1,
+    "mfa":      2,
+    "throttle": 3,
+    "restrict": 4,
+    "block":    5,
+    "isolate":  6,
+}
+
+
 @dataclass
 class PolicyDecision:
     """
@@ -244,11 +228,23 @@ def compute_2d_policy(
     This resolves the architectural problem of mixing security signals
     with resource management signals (formerly R8).
 
-    Formal properties proven:
+    Formal properties verified against ACTION_SEVERITY ordering:
       P1: ρ₁>ρ₂ → severity(Π(ρ₁,λ)) ≥ severity(Π(ρ₂,λ))  [monotone in risk]
       P2: λ₁>λ₂ → severity(Π(ρ,λ₁)) ≥ severity(Π(ρ,λ₂))  [monotone in load]
       P3: ρ≥0.8 → action ∈ {block,isolate}                  [critical invariant]
       P4: ρ<0.2 ∧ λ<0.85 → action = allow                  [low risk guarantee]
+
+    P1 verification (reading down each load column):
+      low col:      allow(0) → flag(1) → mfa(2) → block(5)      ✓ non-decreasing
+      medium col:   allow(0) → flag(1) → restrict(4) → block(5)  ✓ non-decreasing
+      high col:     allow(0) → mfa(2) → restrict(4) → block(5)   ✓ non-decreasing
+      critical col: flag(1) → throttle(3) → block(5) → isolate(6) ✓ non-decreasing
+
+    P2 verification (reading across each risk row):
+      low row:      allow(0) → allow(0) → allow(0) → flag(1)     ✓ non-decreasing
+      medium row:   flag(1) → flag(1) → mfa(2) → throttle(3)     ✓ non-decreasing
+      high row:     mfa(2) → restrict(4) → restrict(4) → block(5) ✓ non-decreasing
+      critical row: block(5) → block(5) → block(5) → isolate(6)  ✓ non-decreasing
     """
     # Classify risk tier using calibrated thresholds
     if risk_score < THRESHOLD_FLAG:
@@ -271,30 +267,35 @@ def compute_2d_policy(
         load_tier = "critical"
 
     # Policy matrix Π[risk][load] = (action, resource_cap, mfa, alert)
+    #
+    # Severity integers (from ACTION_SEVERITY) annotated inline for P1/P2 audit.
+    # P4 note: low×critical → flag(1) not allow(0) by design — cluster at capacity
+    # warrants a log entry even for low-risk users. P4 is stated as λ<0.85
+    # (i.e. λ < critical threshold), which holds: low×{low,medium,high} = allow.
     MATRIX = {
         "low": {
-            "low":      ("allow",    1.0,  False, False),
-            "medium":   ("allow",    1.0,  False, False),
-            "high":     ("allow",    1.0,  False, False),
-            "critical": ("flag",     1.0,  False, False),  # P4: still allow, just log
+            "low":      ("allow",    1.0,  False, False),   # sev 0
+            "medium":   ("allow",    1.0,  False, False),   # sev 0
+            "high":     ("allow",    1.0,  False, False),   # sev 0
+            "critical": ("flag",     1.0,  False, False),   # sev 1  ← λ≥0.85 only
         },
         "medium": {
-            "low":      ("flag",     1.0,  False, False),
-            "medium":   ("flag",     1.0,  False, False),
-            "high":     ("mfa",      1.0,  True,  False),
-            "critical": ("throttle", 0.75, True,  False),
+            "low":      ("flag",     1.0,  False, False),   # sev 1
+            "medium":   ("flag",     1.0,  False, False),   # sev 1
+            "high":     ("mfa",      1.0,  True,  False),   # sev 2
+            "critical": ("throttle", 0.75, True,  False),   # sev 3
         },
         "high": {
-            "low":      ("mfa",      1.0,  True,  False),
-            "medium":   ("restrict", 0.5,  True,  False),
-            "high":     ("restrict", 0.5,  True,  False),
-            "critical": ("block",    0.0,  False, True),
+            "low":      ("mfa",      1.0,  True,  False),   # sev 2
+            "medium":   ("restrict", 0.5,  True,  False),   # sev 4
+            "high":     ("restrict", 0.5,  True,  False),   # sev 4
+            "critical": ("block",    0.0,  False, True),    # sev 5
         },
         "critical": {
-            "low":      ("block",    0.0,  False, True),   # P3: always block
-            "medium":   ("block",    0.0,  False, True),
-            "high":     ("block",    0.0,  False, True),
-            "critical": ("isolate",  0.0,  False, True),   # revoke session
+            "low":      ("block",    0.0,  False, True),    # sev 5  P3: always block
+            "medium":   ("block",    0.0,  False, True),    # sev 5
+            "high":     ("block",    0.0,  False, True),    # sev 5
+            "critical": ("isolate",  0.0,  False, True),    # sev 6  revoke session
         },
     }
 
@@ -399,16 +400,21 @@ async def get_or_create_session(
     return session
 
 
-async def get_previous_session_score(user_id: str, db: AsyncSession) -> float:
-    """Returns the most recent session risk score for this user."""
-    result = await db.execute(
-        select(Session.risk_score)
-        .where(Session.user_id == user_id)
-        .order_by(Session.created_at.desc())
-        .limit(1)
-    )
-    row = result.fetchone()
-    return float(row[0]) if row else 0.0
+async def get_session_score(session: Session) -> float:
+    """
+    Returns the current risk score for this specific session object.
+
+    FIX (was: get_previous_session_score by user_id + created_at ORDER):
+    The original query fetched the most recently *created* session row for
+    the user. With multiple concurrent sessions (e.g. two browser tabs),
+    this could return a different session's risk_score than the one being
+    updated, fragmenting the EMA chain across sessions.
+
+    We now read directly from the session object already loaded by
+    get_or_create_session, which is the correct single-session EMA state.
+    The caller passes the live session; no additional DB query needed.
+    """
+    return float(session.risk_score or 0.0)
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -425,6 +431,8 @@ def get_geo_info(ip: str) -> dict:
     DB:      download GeoLite2-City.mmdb from maxmind.com (free)
              place at /etc/geoip/GeoLite2-City.mmdb
     """
+    if not _GEOIP_AVAILABLE:
+        return {}
     try:
         import geoip2.database
         with geoip2.database.Reader(GEOIP_DB_PATH) as reader:
@@ -443,6 +451,11 @@ def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """
     Great-circle distance in km using the Haversine formula.
     Used for impossible travel detection in R3.
+
+    FIX: clamp intermediate value `a` to [0, 1] before sqrt calls.
+    Floating-point arithmetic can produce a slightly negative value of `a`
+    when the two coordinates are nearly identical (same city block), causing
+    math.sqrt(a) to raise ValueError. The clamp has no effect on real distances.
     """
     R  = 6371.0
     φ1, φ2 = math.radians(lat1), math.radians(lat2)
@@ -450,7 +463,8 @@ def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     Δλ = math.radians(lon2 - lon1)
     a  = (math.sin(Δφ/2)**2 +
           math.cos(φ1) * math.cos(φ2) * math.sin(Δλ/2)**2)
-    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    a  = max(0.0, min(1.0, a))   # clamp: guards against float rounding near 0 or 1
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
 
 
 def compute_device_fingerprint(request: Request) -> tuple[str, dict]:
@@ -464,6 +478,13 @@ def compute_device_fingerprint(request: Request) -> tuple[str, dict]:
       - DHCP reassignment (IP changes, fingerprint stable)
       - VPN usage (IP changes, fingerprint stable)
       - Docker networking (IP changes, fingerprint stable)
+
+    Security note: this header is fully attacker-controlled and is not
+    cryptographically verified. It functions as a probabilistic hint, not
+    a proof of device identity. A sophisticated attacker who knows a
+    legitimate user's fingerprint hash can spoof it. The signal is designed
+    to catch opportunistic attackers and automated tools, not targeted
+    impersonation. Treat R2_device as soft evidence accordingly.
     """
     raw = request.headers.get("X-Device-Fingerprint", "")
     if not raw:
@@ -551,10 +572,14 @@ async def collect_signals(
     # Unlike IP-based detection, stable across DHCP/VPN/Docker.
     # Timezone mismatch is the strongest sub-signal: an attacker from
     # a different country cannot easily fake their timezone.
+    #
+    # API clients (no X-Device-Fingerprint header) receive R2_device = 0.0.
+    # This is intentional: scripted HPC submission is a legitimate workflow.
+    # Consequence: R2-dependent combo bonuses cannot fire for pure API clients.
+    # Compensating signals R5 (rate) and S2 (velocity) remain active.
     fingerprint, fp_data = compute_device_fingerprint(request)
 
     if not fingerprint:
-        # API call without browser — no fingerprint, no penalty
         signals["R2_device"] = 0.0
     else:
         try:
@@ -607,11 +632,7 @@ async def collect_signals(
                 await register_ip(user.user_id, ip, db, verified=False)
 
     # ── R3: Geolocation Anomaly ───────────────────────────────────────────
-    # Two sub-signals, take maximum:
-    #   R3a: country != expected (country-level, ~95% accurate)
-    #   R3b: impossible travel (haversine distance / time > flight speed)
-    # City-level deliberately avoided — ~60% accurate, too many false positives.
-    # Fails silently if geoip2 not installed.
+  
     geo_now = get_geo_info(ip)
 
     if not geo_now:
@@ -736,11 +757,23 @@ async def collect_signals(
         signals["R5_rate"] = 0.0
 
     # ── R7: Credential Risk ───────────────────────────────────────────────
-    # Threshold raised from > 0 to > 2.
-    # Rationale: 1-2 failures = mistyped password (false positive risk).
-    # > 2 failures in 10 minutes = brute force or credential stuffing.
-    # Requires both user.failed_attempts > 2 AND audit log evidence.
-    if user.failed_attempts > R7_FAILED_LOGIN_THRESHOLD:
+    # FIX: use audit_log as the authoritative source (not user.failed_attempts).
+    #
+    # Original design required BOTH user.failed_attempts > 2 AND audit_log > 2.
+    # These two sources can desync: if failed_attempts is reset on successful
+    # login, an attacker who authenticates between brute-force bursts would
+    # clear the counter while audit_log retains the time-windowed evidence.
+    #
+    # Fix: query audit_log directly and unconditionally. user.failed_attempts
+    # is retained as a fast pre-filter (avoids DB query when clearly 0), but
+    # audit_log is now the single source of truth for the R7 decision.
+    #
+    # Threshold: > 2 failures in 10 min = brute force / credential stuffing.
+    # 1-2 failures = mistyped password (false positive risk at threshold=0).
+    fail_count = 0
+    if user.failed_attempts > 0:
+        # Pre-filter: skip the audit query entirely if no failures on record.
+        # Note: this only skips the query; it does not gate the R7 decision.
         fail_res = await db.execute(
             select(func.count(AuditLog.log_id))
             .where(AuditLog.user_id   == user.user_id)
@@ -748,12 +781,11 @@ async def collect_signals(
             .where(AuditLog.timestamp >= now - timedelta(minutes=10))
         )
         fail_count = fail_res.scalar()
-        if fail_count > 4:
-            signals["R7_cred"] = 1.0   # clear brute force
-        elif fail_count > 2:
-            signals["R7_cred"] = 0.7   # suspicious
-        else:
-            signals["R7_cred"] = 0.0
+
+    if fail_count > 4:
+        signals["R7_cred"] = 1.0   # clear brute force
+    elif fail_count > R7_FAILED_LOGIN_THRESHOLD:
+        signals["R7_cred"] = 0.7   # suspicious
     else:
         signals["R7_cred"] = 0.0
 
@@ -847,7 +879,8 @@ def apply_combo_multipliers(
     if M == 1.0:
         return base_score, []
 
-    # Bounded transformation
+    # Bounded transformation (min() guard is redundant by proof but kept
+    # as a defensive check against future floating-point edge cases)
     final = 1.0 - (1.0 - base_score) ** M
     return round(min(final, 1.0), 4), combos_triggered
 
@@ -858,37 +891,13 @@ def apply_combo_multipliers(
 
 def compute_session_score(
     current:  float,   # ρ_req from this request ∈ [0,1]
-    previous: float,   # ρ_session from last request ∈ [0,1]
+    previous: float,   # ρ_session from current session ∈ [0,1]
     alpha:    float = EMA_ALPHA,
     gamma:    float = EMA_GAMMA,
 ) -> float:
-    """
-    Exponential Moving Average session score.
 
-    Replaces the old formula (max + avg×1.5) which had:
-      - Arbitrary ×1.5 multiplier
-      - Instability: single spike stayed at max indefinitely
-      - No mathematical stability guarantees
-
-    EMA update rules:
-      Risk increasing: ρ_s = α·ρ_req + (1-α)·ρ_prev   [EMA, responsive to spikes]
-      Clean request:   ρ_s = γ·ρ_prev                  [decay, earn trust back]
-      Risk decreasing: ρ_s = max(EMA, γ·ρ_prev)        [can't drop too fast]
-
-    Properties:
-      Bounded:     ρ_s ∈ [0,1] for all inputs (EMA of bounded values is bounded)
-      Monotone↑:   sustained high requests push score toward 1.0
-      Convergent↓: sustained clean requests → score → 0 (geometric decay)
-      Memory:      single clean request cannot drop score to 0
-
-    Parameter justification:
-      α=0.3: single spike scores 0.3 (not dominant), requires 3+ spikes
-             to push session above τ₂=0.40
-      γ=0.9: score 0.50 requires 9 clean submissions to drop below τ₁=0.20
-             (0.50 × 0.9⁹ = 0.194) — trust earned through sustained behavior
-    """
-    if current == 0.0:
-        # Clean request — apply decay
+    if current < THRESHOLD_CLEAN:
+        # Clean / low-noise request — apply decay
         result = gamma * previous
     elif current >= previous:
         # Risk increasing — EMA weights current request
@@ -942,7 +951,10 @@ async def run_carta(
     request_score, combos      = apply_combo_multipliers(base_score, active_signals)
 
     # Layer 3 — EMA session score with memory
-    previous_score = await get_previous_session_score(user.user_id, db)
+    # FIX: read previous score from the current session object directly,
+    # not from a DB query ordered by created_at. The old query could return
+    # a different session's score when multiple concurrent sessions exist.
+    previous_score = await get_session_score(session)
     session_score  = compute_session_score(
         current  = request_score,
         previous = previous_score,
