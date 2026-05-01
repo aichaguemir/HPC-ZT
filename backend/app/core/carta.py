@@ -24,13 +24,13 @@ from app.core.utils import get_client_ip
 # ══════════════════════════════════════════════════════════════════════════
 
 SIGNAL_WEIGHTS = {
-    "R1_baseline": 0.15,
+    "R1_baseline": 0.13,
     "R2_device":   0.10,
-    "R3_geo":      0.20,
-    "R4_temporal": 0.05,
-    "R5_rate":     0.15,
-    "R7_cred":     0.25,
-    "S2_velocity": 0.10,
+    "R3_geo":      0.18,
+    "R4_temporal": 0.04,
+    "R5_rate":     0.13,
+    "R7_cred":     0.35,  
+    "S2_velocity": 0.07,
 }
 
 # Total weight — used for normalization denominator
@@ -49,7 +49,8 @@ COMBO_MULTIPLIERS = {
     ("R4_temporal","R5_rate"):    1.25,  # off-hours + high rate → automated attack
     ("R2_device", "R5_rate"):     1.20,  # new device + high rate → scripted attack
     ("R1_baseline","R2_device"):  1.15,  # huge job + new device → resource abuse
-    ("R3_geo",    "R5_rate"):     1.30,  # foreign + high rate → remote scripted attack
+    ("R3_geo",    "R5_rate"):     1.30,  # foreign + high rate → remote scripted attack 
+    ("R1_baseline" , "R7_cred"): 1.45 ,  # huge job + failed logins → account takeover
 }
 
 
@@ -91,8 +92,8 @@ TEMPORAL_SIGMA_THRESHOLD = 2.0    # deviations from personal mean to trigger
 
 # R5 — rate anomaly
 RATE_THRESHOLDS = {
-    "student":    2,
-    "researcher": 5,
+    "student":    5,
+    "researcher": 8,
     "admin":      10,
 }
 
@@ -199,15 +200,7 @@ ACTION_SEVERITY: dict[str, int] = {
 
 @dataclass
 class PolicyDecision:
-    """
-    Output of Π(ρ,λ). Encodes all enforcement decisions.
 
-    action:       allow | flag | mfa | restrict | throttle | block | isolate
-    resource_cap: 1.0=full resources, 0.5=half, 0.0=blocked
-    mfa_required: True if step-up authentication required
-    admin_alert:  True if admin notification should be sent
-    reason:       human-readable explanation of decision
-    """
     action:       str
     risk_tier:    str
     load_tier:    str
@@ -533,6 +526,8 @@ async def collect_signals(
     }
     now = datetime.now(timezone.utc)
     ip  = get_client_ip(request)
+    
+
 
     # ── R1: Behavioral Baseline Deviation ─────────────────────────────────
     # sᵢ ∈ {0.0, 0.5, 1.0} based on deviation from personal history.
@@ -755,39 +750,28 @@ async def collect_signals(
         signals["R5_rate"] = 0.7   # at threshold — suspicious
     else:
         signals["R5_rate"] = 0.0
-
+        
+        
     # ── R7: Credential Risk ───────────────────────────────────────────────
-    # FIX: use audit_log as the authoritative source (not user.failed_attempts).
-    #
-    # Original design required BOTH user.failed_attempts > 2 AND audit_log > 2.
-    # These two sources can desync: if failed_attempts is reset on successful
-    # login, an attacker who authenticates between brute-force bursts would
-    # clear the counter while audit_log retains the time-windowed evidence.
-    #
-    # Fix: query audit_log directly and unconditionally. user.failed_attempts
-    # is retained as a fast pre-filter (avoids DB query when clearly 0), but
-    # audit_log is now the single source of truth for the R7 decision.
-    #
-    # Threshold: > 2 failures in 10 min = brute force / credential stuffing.
-    # 1-2 failures = mistyped password (false positive risk at threshold=0).
-    fail_count = 0
-    if user.failed_attempts > 0:
-        # Pre-filter: skip the audit query entirely if no failures on record.
-        # Note: this only skips the query; it does not gate the R7 decision.
-        fail_res = await db.execute(
-            select(func.count(AuditLog.log_id))
-            .where(AuditLog.user_id   == user.user_id)
-            .where(AuditLog.action    == "login_failed")
-            .where(AuditLog.timestamp >= now - timedelta(minutes=10))
-        )
-        fail_count = fail_res.scalar()
+
+        
+    fail_res = await db.execute(
+        select(func.count(AuditLog.log_id))
+        .where(AuditLog.user_id   == user.user_id)
+        .where(AuditLog.action    == "login_failed")
+        .where(AuditLog.timestamp >= now - timedelta(minutes=10))
+    )
+    fail_count = fail_res.scalar()
 
     if fail_count > 4:
-        signals["R7_cred"] = 1.0   # clear brute force
+        signals["R7_cred"] = 1.0
     elif fail_count > R7_FAILED_LOGIN_THRESHOLD:
-        signals["R7_cred"] = 0.7   # suspicious
+        signals["R7_cred"] = 0.7
     else:
-        signals["R7_cred"] = 0.0
+         signals["R7_cred"] = 0.0    
+
+        
+        
 
     # ── S2: Submission Velocity Pattern ───────────────────────────────────
     # Coefficient of variation (CV = σ/μ) of inter-submission intervals.
@@ -821,6 +805,21 @@ async def collect_signals(
             signals["S2_velocity"] = 1.0   # zero interval = simultaneous = automated
     else:
         signals["S2_velocity"] = 0.0
+        
+        
+        
+    
+    logger.info(
+    f"SIGNALS DEBUG user={user.username}: "
+    f"R1={signals['R1_baseline']:.2f} "
+    f"R2={signals['R2_device']:.2f} "
+    f"R3={signals['R3_geo']:.2f} "
+    f"R4={signals['R4_temporal']:.2f} "
+    f"R5={signals['R5_rate']:.2f} "
+    f"R7={signals['R7_cred']:.2f} "
+    f"S2={signals['S2_velocity']:.2f} "
+    f"fail_count={fail_count}"
+    ) 
 
     return signals
 
@@ -925,24 +924,7 @@ async def run_carta(
     session: Session,
     content: Optional[str] = None,
 ) -> dict:
-    """
-    Complete CARTA + 2D Policy evaluation for one job submission.
-
-    Flow:
-      1. Collect normalized signals sᵢ ∈ [0,1]
-      2. Compute ρ_req = normalized weighted sum ∈ [0,1]
-      3. Apply combo multipliers (bounded transformation)
-      4. Compute ρ_session via EMA with decay
-      5. Fetch λ = cluster load ∈ [0,1]
-      6. Apply Π(ρ_session, λ) → PolicyDecision
-      7. Return full result
-
-    Score interpretation (empirically calibrated):
-      ρ < 0.20:  background noise — no anomalous signals
-      ρ < 0.40:  anomalous but explainable — single signal fired
-      ρ < 0.80:  multiple concurrent anomalies — step-up auth required
-      ρ ≥ 0.80:  confirmed attack pattern — block unconditionally
-    """
+    
     # Layer 1 — collect normalized signals
     signals = await collect_signals(job, user, policy, db, request)
 
@@ -966,8 +948,17 @@ async def run_carta(
     await db.commit()
 
     # Layer 4 — 2D policy decision
+    # Use the higher of request_score and session_score for policy enforcement.
+    # The EMA session score smooths gradual drift but must not dampen a sudden
+    # high-risk spike (e.g. R7 firing with 5 failed logins on an otherwise clean
+    # session). Without this, a user with previous_score=0.0 who triggers R7=1.0
+    # produces session_score≈0.08 via EMA → wrongly falls into "low" tier → allow.
+    # Taking the max ensures the worst observed signal in this request is enforced.
     cluster_load = await get_cluster_utilization()
-    decision     = compute_2d_policy(session_score, cluster_load)
+    policy_score = max(request_score, session_score) 
+    if signals.get("R7_cred", 0.0) == 1.0:
+        policy_score = max(policy_score, THRESHOLD_MFA)
+    decision     = compute_2d_policy(policy_score, cluster_load)
 
     # Build result — scores exposed as both [0,1] and [0,100] for display
     all_signals = active_signals + combos
@@ -987,6 +978,7 @@ async def run_carta(
         # Normalized scores [0,1] — for formal model and paper
         "request_score_norm": request_score,
         "session_score_norm": session_score,
+        "policy_score_norm":  policy_score,   # max(request, session) — drives decision
         # Display scores [0,100] — for API responses and dashboard
         "request_score":      round(request_score * 100),
         "session_score":      round(session_score * 100),
@@ -1023,7 +1015,10 @@ async def run_carta(
     else:
         logger.info(
             f"CARTA: user={user.username} "
-            f"ρ={session_score:.3f} λ={cluster_load:.1%} → allow"
+            f"ρ_req={request_score:.3f} "
+            f"ρ_session={session_score:.3f} "
+            f"ρ_policy={policy_score:.3f} "
+            f"λ={cluster_load:.1%} → allow"
         )
 
     return result

@@ -163,12 +163,14 @@ async def submit_job(
         memory                     = params.memory,
         wall_time                  = f"{params.wall_time_hours:02d}:{params.wall_time_minutes:02d}",
         script_filename            = file.filename,
+        submitted_at = datetime.now(timezone.utc),
         output_file                = f"output_{unique_id}.log",
         error_file                 = f"error_{unique_id}.log",
         policy_id_at_submission    = policy.policy_id,
         policy_role_at_submission  = current_user.role,
         cores_limit_at_submission  = policy.max_cores_per_job,
         memory_limit_at_submission = policy.max_memory_mb,
+        
     )
     db.add(pending_job)
     await db.flush()
