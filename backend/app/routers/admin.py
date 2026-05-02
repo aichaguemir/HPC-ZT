@@ -20,6 +20,7 @@ from app.db.models import User, AuditLog, UserKnownIP, Job
 from app.services.ssh import run_ssh_async
 from app.core.config import LSF_PATH, KEYCLOAK_URL, KEYCLOAK_REALM
 from app.core.logging import logger
+from app.core.audit_chain import verify_chain, verify_anchors, verify_full
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -391,15 +392,6 @@ async def get_user_ips(
     }
 
 
-# ── Audit chain verify ─────────────────────────────────────────────────────
-
-@router.get("/audit/verify")
-async def verify_audit_chain(
-    db:           AsyncSession = Depends(get_db),
-    current_user: User         = Depends(require_admin),
-):
-    return await verify_chain(db)
-
 
 # ── Audit logs ─────────────────────────────────────────────────────────────
 
@@ -468,3 +460,52 @@ async def list_flagged_jobs(
             for job, username in rows
         ],
     }
+     
+     
+
+
+
+
+# ── Add these three endpoints to admin.py ─────────────────────────────────
+
+@router.get("/audit/verify")
+async def audit_verify_chain(
+    db:    AsyncSession = Depends(get_db),
+    admin: User         = Depends(require_admin),
+):
+    """
+    Verify local HMAC chain integrity.
+    Property 1 (detection) + Property 2 (resistance).
+    """
+    return await verify_chain(db)
+
+
+@router.get("/audit/verify/anchors")
+async def audit_verify_anchors(
+    db:    AsyncSession = Depends(get_db),
+    admin: User         = Depends(require_admin),
+):
+    """
+    Verify external anchor consistency.
+    Property 3 (external independence).
+    Checks that current chain hashes match anchor file records.
+    """
+    return await verify_anchors(db)
+
+
+@router.get("/audit/verify/full")
+async def audit_verify_full(
+    db:    AsyncSession = Depends(get_db),
+    admin: User         = Depends(require_admin),
+):
+    """
+    Complete audit integrity verification.
+    Checks all three properties simultaneously:
+      - Tamper detection    (HMAC chain)
+      - Tamper resistance   (HMAC secret required)
+      - External independence (anchor file consistency)
+
+    Use this for the paper demo.
+    """
+    return await verify_full(db)
+     
