@@ -13,7 +13,6 @@ export default function SubmitJob() {
   const [loading, setLoading] = useState(false);
   const [serverError, setServerError] = useState(""); 
 
-
   const memoryOptions = [
     { value: 100, label: "100 MB (Minimum)" },
     { value: 512, label: "512 MB (Small Job)" },
@@ -46,7 +45,8 @@ export default function SubmitJob() {
     formData.append("wall_time_minutes", parseInt(wallTimeMinutes));
 
     try {
-      const res = await axios.post("http://localhost:8000/api/v1/jobs/submit", formData, {
+
+      const res = await axios.post("https://localhost:8000/api/v1/jobs/submit", formData, {
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "multipart/form-data",

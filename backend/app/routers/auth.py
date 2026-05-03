@@ -261,7 +261,7 @@ async def confirm_totp_setup(
             "Invalid code. Make sure your phone's time is correct and try again."
         )
 
-    # ✅ Verified — promote temp → permanent and activate
+    # Verified — promote temp → permanent and activate
     current_user.totp_secret      = current_user.temp_totp_secret
     current_user.temp_totp_secret = None
     current_user.totp_enabled     = True

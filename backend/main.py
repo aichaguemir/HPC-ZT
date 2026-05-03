@@ -220,9 +220,10 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://192.168.1.104:3000",  # her machine IP if different
+        "http://localhost",
+        "https://localhost",
+        "http://127.0.0.1",
+        "https://127.0.0.1"
     ],
     allow_credentials = True,
     allow_methods     = ["*"],
@@ -233,17 +234,12 @@ app.include_router(auth_router.router, prefix="/api/v1")
 app.include_router(admin_router.router, prefix="/api/v1")
 
 
-@app.get("/health")
-async def health():
-    return {"status": "ok"}
-# --- كود الـ Health Check للمرحلة الرابعة ---
+
+
 
 @app.get("/health")
 def health_check():
-    """
-    هذا المسار مخصص لـ Docker للتأكد من أن التطبيق جاهز.
-    سيعيد حالة 200 OK مما يجعل الـ Container يظهر كـ (healthy).
-    """
+   
     return {
         "status": "healthy",
         "service": "hpc-backend",

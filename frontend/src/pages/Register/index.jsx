@@ -2,11 +2,6 @@ import React, { useState } from "react";
 import axios from "axios";
 import { useNavigate, Link } from "react-router-dom";
 
-/**
- * Register Component
- * Optimized with precise SVG icon alignment (perfectly centered).
- * All advanced validations are kept.
- */
 export default function Register() {
   const navigate = useNavigate();
   
@@ -53,7 +48,8 @@ export default function Register() {
 
     setLoading(true);
     try {
-      const response = await axios.post("http://localhost:8000/api/v1/auth/register", {
+   
+      const response = await axios.post("https://localhost:8000/api/v1/auth/register", {
         username: form.username,
         email: form.email,
         password: form.password,
@@ -72,19 +68,20 @@ export default function Register() {
         if (lowerDetail.includes("email")) setFieldErrors({ email: "Email already exists." });
         else if (lowerDetail.includes("username")) setFieldErrors({ username: "Username taken." });
         else setFieldErrors({ general: errorDetail });
+      } else {
+        setFieldErrors({ general: "Registration failed. Check your connection or data." });
       }
     } finally {
       setLoading(false);
     }
   };
 
-  // Dynamically generated Input style
   const getInputStyle = (fieldName) => ({
     borderColor: fieldErrors[fieldName] ? "#dc2626" : "#d1d5db",
     borderWidth: fieldErrors[fieldName] ? "2px" : "1px",
     padding: "12px",
     borderRadius: "8px",
-    flex: 1, // Let input take all space
+    flex: 1,
     borderStyle: "solid",
     outline: "none"
   });
@@ -101,7 +98,6 @@ export default function Register() {
         )}
 
         <form onSubmit={handleSubmit} noValidate>
-          {/* Names Row */}
           <div style={{ display: "flex", gap: "10px", marginBottom: "12px" }}>
             <div style={{ flex: 1 }}>
               <label style={{ display: "block", marginBottom: "5px", fontSize: "14px" }}>First Name</label>
@@ -115,14 +111,12 @@ export default function Register() {
             </div>
           </div>
 
-          {/* Username */}
           <div style={{ marginBottom: "12px" }}>
             <label style={{ display: "block", marginBottom: "5px", fontSize: "14px" }}>Username</label>
             <input name="username" value={form.username} onChange={handleChange} style={getInputStyle("username")} required />
             {fieldErrors.username && <span className="error-message" style={{ color: "#dc2626", fontSize: "12px", display: "block", marginTop: "4px" }}>{fieldErrors.username}</span>}
           </div>
 
-          {/* Role */}
           <div style={{ marginBottom: "12px" }}>
             <label style={{ display: "block", marginBottom: "5px", fontSize: "14px" }}>Register as</label>
             <select name="requestedRole" value={form.requestedRole} onChange={handleChange} 
@@ -132,37 +126,30 @@ export default function Register() {
             </select>
           </div>
 
-          {/* Email */}
           <div style={{ marginBottom: "15px" }}>
             <label style={{ display: "block", marginBottom: "5px", fontSize: "14px" }}>Email Address</label>
             <input type="email" name="email" value={form.email} onChange={handleChange} style={getInputStyle("email")} required />
             {fieldErrors.email && <span className="error-message" style={{ color: "#dc2626", fontSize: "12px", display: "block", marginTop: "4px" }}>{fieldErrors.email}</span>}
           </div>
 
-          {/* Password - PERFECTED ALIGNMENT */}
           <div style={{ marginBottom: "12px" }}>
             <label style={{ display: "block", marginBottom: "5px", fontSize: "14px" }}>Password</label>
-            <div className="password-field-container" 
-              style={{ 
-                display: "flex", 
-                alignItems: "center", // Perfectly centers vertically
-                position: "relative",
-              }}>
+            <div className="password-field-container" style={{ display: "flex", alignItems: "center", position: "relative" }}>
               <input 
                 type={showPassword ? "text" : "password"} 
                 name="password" 
                 value={form.password} 
                 onChange={handleChange} 
-                style={{...getInputStyle("password"), paddingRight: "45px", width: "100%"}} // Space for the eye
+                style={{...getInputStyle("password"), paddingRight: "45px", width: "100%"}}
                 required 
               />
               <span className="toggle-eye" onClick={() => setShowPassword(!showPassword)} 
                 style={{ 
                   position: "absolute", 
-                  right: "12px", // Fixed distance from the right edge
-                  display: "flex", // Keep SVG aligned internally
+                  right: "12px", 
+                  display: "flex", 
                   cursor: "pointer", 
-                  color: fieldErrors.password ? "#dc2626" : "#2563eb", // Blue when OK, Red when error
+                  color: fieldErrors.password ? "#dc2626" : "#2563eb",
                   transition: "color 0.2s"
                 }}>
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -180,21 +167,15 @@ export default function Register() {
             {fieldErrors.password && <span className="error-message" style={{ color: "#dc2626", fontSize: "12px", display: "block", marginTop: "4px" }}>{fieldErrors.password}</span>}
           </div>
 
-          {/* Confirm Password - PERFECTED ALIGNMENT */}
           <div style={{ marginBottom: "12px" }}>
             <label style={{ display: "block", marginBottom: "5px", fontSize: "14px" }}>Confirm Password</label>
-            <div className="password-field-container" 
-              style={{ 
-                display: "flex", 
-                alignItems: "center", // Perfectly centers vertically
-                position: "relative",
-              }}>
+            <div className="password-field-container" style={{ display: "flex", alignItems: "center", position: "relative" }}>
               <input 
                 type={showConfirmPassword ? "text" : "password"} 
                 name="confirmPassword" 
                 value={form.confirmPassword} 
                 onChange={handleChange} 
-                style={{...getInputStyle("confirmPassword"), paddingRight: "45px", width: "100%"}} // Space for the eye
+                style={{...getInputStyle("confirmPassword"), paddingRight: "45px", width: "100%"}}
                 required 
               />
               <span className="toggle-eye" onClick={() => setShowConfirmPassword(!showConfirmPassword)} 

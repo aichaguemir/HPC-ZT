@@ -214,11 +214,12 @@ async def reactivate_user(
         raise HTTPException(400, "User is already active")
 
     token = await get_admin_token()
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(verify=False) as client:
         response = await client.put(
             f"{KEYCLOAK_URL}/admin/realms/{KEYCLOAK_REALM}/users/{user.keycloak_id}",
             headers={"Authorization": f"Bearer {token}"},
-            json={"enabled": True}
+            json={"enabled": True},
+            
         )
         response.raise_for_status()
 
