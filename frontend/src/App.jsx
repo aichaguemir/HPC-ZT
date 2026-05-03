@@ -26,8 +26,6 @@ import PendingRequests from "./pages/Users/pending/index";
  * Handles Global Routing and Authentication Guards
  */
 export default function App() {
-  
-  // Checking authentication status from the store
   const isAuth = isAuthenticated();
 
   return (
@@ -49,48 +47,19 @@ export default function App() {
             )
           }
         >
-          {/* 1. SHARED ROUTES: Accessible by Student, Researcher, Admin */}
+          {/* 1. SHARED ROUTES: Accessible by any authenticated user */}
           <Route index element={<Dashboard />} />
           <Route path="profile" element={<Profile />} />
           <Route path="jobs" element={<JobQueue />} />
           <Route path="submit" element={<SubmitJob />} />
 
-          {/* 2. ELEVATED ROUTES: Restricted to Admins and Researchers only */}
-          <Route
-            path="nodes"
-            element={
-              <ProtectedRoute allowedRoles={["admin"]}>
-                <NodeMap />
-              </ProtectedRoute>
-            }
-          />
-
-          {/* 3. ADMIN ONLY ROUTES: Access Management, Logs, and Approval queue */}
-          <Route
-            path="audit"
-            element={
-              <ProtectedRoute allowedRoles={["admin"]}>
-                <AuditLog />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="users"
-            element={
-              <ProtectedRoute allowedRoles={["admin"]}>
-                <Users />
-              </ProtectedRoute>
-            }
-          />
-          {/* NEW: Admin page to approve new user registrations */}
-          <Route
-            path="pending"
-            element={
-              <ProtectedRoute allowedRoles={["admin"]}>
-                <PendingRequests />
-              </ProtectedRoute>
-            }
-          />
+          {/* 2. ADMIN & ELEVATED ROUTES: Protected via specific roles */}
+          <Route element={<ProtectedRoute allowedRoles={["admin"]} />}>
+            <Route path="nodes" element={<NodeMap />} />
+            <Route path="audit" element={<AuditLog />} />
+            <Route path="users" element={<Users />} />
+            <Route path="pending" element={<PendingRequests />} />
+          </Route>
         </Route>
 
         {/* --- CATCH-ALL ROUTE --- */}

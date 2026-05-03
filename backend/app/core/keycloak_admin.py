@@ -1,16 +1,26 @@
 import httpx
-from app.core.config import KEYCLOAK_URL, KEYCLOAK_REALM
-from app.core.logging import logger
 import os
 import json as json_lib
+import warnings
+import ssl
+from app.core.config import KEYCLOAK_URL, KEYCLOAK_REALM
+from app.core.logging import logger
+
+# تجاهل تحذيرات الشهادات غير الموثقة في بيئة التطوير
+warnings.filterwarnings("ignore", message="Unverified HTTPS request")
+
+
+ssl_context = ssl.create_default_context()
+ssl_context.check_hostname = False
+ssl_context.verify_mode = ssl.CERT_NONE
 
 KEYCLOAK_ADMIN_USER     = os.getenv("KEYCLOAK_ADMIN_USER", "admin")
-KEYCLOAK_ADMIN_PASSWORD = os.getenv("KEYCLOAK_ADMIN_PASSWORD", "admin")
+KEYCLOAK_ADMIN_PASSWORD = os.getenv("KEYCLOAK_ADMIN_PASSWORD", "***REMOVED***")
 
 
 async def get_admin_token() -> str:
     """Get Keycloak master admin token."""
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(verify=ssl_context) as client:
         response = await client.post(
             f"{KEYCLOAK_URL}/realms/master/protocol/openid-connect/token",
             data={
@@ -23,6 +33,7 @@ async def get_admin_token() -> str:
         response.raise_for_status()
         return response.json()["access_token"]
 
+
 async def create_keycloak_user(
     username:   str,
     email:      str,
@@ -33,7 +44,7 @@ async def create_keycloak_user(
 ) -> str:
     token = await get_admin_token()
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(verify=ssl_context) as client:
         response = await client.post(
             f"{KEYCLOAK_URL}/admin/realms/{KEYCLOAK_REALM}/users",
             headers={"Authorization": f"Bearer {token}"},
@@ -57,11 +68,12 @@ async def create_keycloak_user(
         logger.info(f"Keycloak user created: {username} ({keycloak_id})")
         return keycloak_id
 
+
 async def assign_keycloak_role(keycloak_id: str, role_name: str) -> None:
     """Assign a realm role to a Keycloak user."""
     token = await get_admin_token()
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(verify=ssl_context) as client:
         # Get role details
         role_response = await client.get(
             f"{KEYCLOAK_URL}/admin/realms/{KEYCLOAK_REALM}/roles/{role_name}",
@@ -84,7 +96,7 @@ async def remove_keycloak_role(keycloak_id: str, role_name: str) -> None:
     """Remove a realm role from a Keycloak user."""
     token = await get_admin_token()
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(verify=ssl_context) as client:
         role_response = await client.get(
             f"{KEYCLOAK_URL}/admin/realms/{KEYCLOAK_REALM}/roles/{role_name}",
             headers={"Authorization": f"Bearer {token}"}
@@ -110,7 +122,7 @@ async def delete_keycloak_user(keycloak_id: str) -> None:
     """Delete a user from Keycloak."""
     token = await get_admin_token()
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(verify=ssl_context) as client:
         response = await client.delete(
             f"{KEYCLOAK_URL}/admin/realms/{KEYCLOAK_REALM}/users/{keycloak_id}",
             headers={"Authorization": f"Bearer {token}"}
@@ -123,7 +135,7 @@ async def disable_keycloak_user(keycloak_id: str) -> None:
     """Disable a user in Keycloak."""
     token = await get_admin_token()
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(verify=ssl_context) as client:
         response = await client.put(
             f"{KEYCLOAK_URL}/admin/realms/{KEYCLOAK_REALM}/users/{keycloak_id}",
             headers={"Authorization": f"Bearer {token}"},

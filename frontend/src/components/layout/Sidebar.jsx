@@ -1,3 +1,5 @@
+import React from "react";
+import { Link } from "react-router-dom"; 
 import { getUser } from "../../store/auth";
 
 /**
@@ -12,26 +14,27 @@ export default function Sidebar() {
       <h2>HPC Portal</h2>
 
       {/* Basic links for all users */}
-      <a href="/">Dashboard</a>
-      <a href="/submit">Submit Job</a>
-      <a href="/jobs">Job Queue</a>
+     
+      <Link to="/">Dashboard</Link>
+      <Link to="/submit">Submit Job</Link>
+      <Link to="/jobs">Job Queue</Link>
 
-      {/* Navigation for Admin and Researcher only */}
-      {(user.role === "admin" ) && (
-        <a href="/nodes">Node Map</a>
+      {/* Navigation for Admin only */}
+      {user?.role === "admin" && (
+        <Link to="/nodes">Node Map</Link>
       )}
 
       {/* Administrative links - Protected: Admin only */}
-      {user.role === "admin" && (
+      {user?.role === "admin" && (
         <>
-          <a href="/audit">Audit Logs</a>
-          <a href="/users">User Management</a>
+          <Link to="/audit">Audit Logs</Link>
+          <Link to="/users">User Management</Link>
           {/* New link for pending user approvals */}
-          <a href="/pending">Pending Requests</a> 
+          <Link to="/pending">Pending Requests</Link> 
         </>
       )}
 
-      <a href="/profile">Profile</a>
+      <Link to="/profile">Profile</Link>
     </div>
   );
 }

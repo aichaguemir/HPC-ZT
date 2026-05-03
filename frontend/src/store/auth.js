@@ -1,10 +1,7 @@
-// src/store/auth.js
-// Real Keycloak token management
-
-const KEYCLOAK_URL    = "http://localhost:8080";
+const KEYCLOAK_URL    = "https://localhost:8443";
 const KEYCLOAK_REALM  = "HPC-Project";
 const KEYCLOAK_CLIENT = "hpc-backend";
-const API_URL         = "http://localhost:8000/api/v1";
+const API_URL         = "https://localhost:8000/api/v1";
 
 // ── Token storage ──────────────────────────────────────────────────────────
 
@@ -16,7 +13,6 @@ export const getToken = () => {
   return sessionStorage.getItem("access_token");
 };
 
-
 export const saveRefreshToken = (token) => {
   sessionStorage.setItem("refresh_token", token);
 };
@@ -24,7 +20,6 @@ export const saveRefreshToken = (token) => {
 export const getRefreshToken = () => {
   return sessionStorage.getItem("refresh_token");
 };
-// -------------------------------------------
 
 export const removeToken = () => {
   sessionStorage.removeItem("access_token");
@@ -71,7 +66,6 @@ export const login = async (username, password) => {
   const data = await response.json();
   saveToken(data.access_token);
   
-
   if (data.refresh_token) saveRefreshToken(data.refresh_token);
 
   const meResponse = await fetch(`${API_URL}/auth/me`, {
@@ -93,7 +87,7 @@ export const login = async (username, password) => {
   return user;
 };
 
-// ── Silent Refresh Logic (زدتلك هاد الدالة المهمة) ──────────────────────────
+// ── Silent Refresh Logic ──────────────────────────────────────────────────
 
 export const refreshToken = async () => {
   const refresh = getRefreshToken();
@@ -126,7 +120,9 @@ export const refreshToken = async () => {
     return false;
   }
 };
-// ── USERS & LOGS FUNCTIONS  ───────────────────────────────────
+
+// ── USERS & LOGS ───────────────────────────────────
+
 export const getAllUsers = async () => {
   const token = getToken();
   const response = await fetch(`${API_URL}/admin/users`, {
@@ -135,7 +131,6 @@ export const getAllUsers = async () => {
   if (!response.ok) throw new Error("Failed to fetch users");
   return await response.json();
 };
-
 
 export const getSystemLogs = async () => {
   const token = getToken();
@@ -182,7 +177,7 @@ export const logout = async () => {
         headers: { "Authorization": `Bearer ${token}` }
       });
     } catch (e) {
-      // ignore logout errors
+      // ignore
     }
   }
   removeToken();

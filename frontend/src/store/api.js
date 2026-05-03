@@ -1,9 +1,9 @@
 import axios from "axios";
 import { getToken, removeToken, refreshToken } from "./auth"; 
-const api = axios.create({
-  baseURL: "http://localhost:8000/api/v1",
-});
 
+const api = axios.create({
+  baseURL: "https://localhost:8000/api/v1", 
+});
 
 api.interceptors.request.use((config) => {
   const token = getToken();
@@ -13,17 +13,14 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
 
-    
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true; 
 
-     
       const refreshed = await refreshToken();
       
       if (refreshed) {
@@ -34,7 +31,6 @@ api.interceptors.response.use(
         return api(originalRequest);
       }
 
-   
       removeToken();
       window.location.href = "/login";
     }

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react"; 
+import React, { useEffect, useState, useCallback } from "react";
 import axios from "axios";
 import { getToken } from "../../store/auth";
 
@@ -7,7 +7,7 @@ export default function JobQueue() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
-  const [error, setError] = useState(""); 
+  const [error, setError] = useState("");
 
   const [showModal, setShowModal] = useState(false);
   const [currentOutput, setCurrentOutput] = useState("");
@@ -16,18 +16,21 @@ export default function JobQueue() {
   const [page, setPage] = useState(1);
   const jobsPerPage = 5;
 
-
   const fetchJobs = useCallback(async () => {
     try {
       setLoading(true);
-      setError(""); 
+      setError("");
       const token = getToken();
-      const res = await axios.get("http://localhost:8000/api/v1/jobs/", {
+     
+      const res = await axios.get("https://localhost:8000/api/v1/jobs/", {
         headers: { Authorization: `Bearer ${token}` }
       });
+
+      console.log("Jobs fetched from API:", res.data);
+
       const jobsList = res.data.jobs || [];
       setJobs(jobsList);
-      
+
       jobsList.forEach(job => {
         if (job.status === "PEND" || job.status === "RUN") {
           updateSingleJobStatus(job.job_id);
@@ -35,7 +38,7 @@ export default function JobQueue() {
       });
     } catch (err) {
       console.error("Fetch Error:", err);
-      setError("Failed to sync with HPC cluster."); 
+      setError("Failed to sync with HPC cluster.");
     } finally {
       setLoading(false);
     }
@@ -44,11 +47,12 @@ export default function JobQueue() {
   const updateSingleJobStatus = async (jobId) => {
     try {
       const token = getToken();
-      const res = await axios.get(`http://localhost:8000/api/v1/jobs/${jobId}/status`, {
+    
+      const res = await axios.get(`https://localhost:8000/api/v1/jobs/${jobId}/status`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setJobs(prevJobs => 
-        prevJobs.map(j => j.job_id === jobId ? { ...j, status: res.data.status } : j)
+      setJobs(prevJobs =>
+        prevJobs.map(j => (j.job_id === jobId ? { ...j, status: res.data.status } : j))
       );
     } catch (err) {
       console.error(`Status check failed for #${jobId}`);
@@ -70,10 +74,11 @@ export default function JobQueue() {
     try {
       setSelectedJobId(jobId);
       const token = getToken();
-      const res = await axios.get(`http://localhost:8000/api/v1/jobs/${jobId}/output`, {
+      
+      const res = await axios.get(`https://localhost:8000/api/v1/jobs/${jobId}/output`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      
+
       setCurrentOutput(cleanLogText(res.data.output));
       setShowModal(true);
     } catch (err) {
@@ -84,10 +89,11 @@ export default function JobQueue() {
   const fetchJobError = async (jobId) => {
     try {
       const token = getToken();
-      const res = await axios.get(`http://localhost:8000/api/v1/jobs/${jobId}/error`, {
+   
+      const res = await axios.get(`https://localhost:8000/api/v1/jobs/${jobId}/error`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      
+
       const cleanedError = cleanLogText(res.data.error);
       alert(`Job #${jobId} Error Log:\n\n${cleanedError}`);
     } catch (err) {
@@ -99,7 +105,8 @@ export default function JobQueue() {
     if (!window.confirm(`Are you sure you want to cancel job #${id}?`)) return;
     try {
       const token = getToken();
-      await axios.delete(`http://localhost:8000/api/v1/jobs/${id}/cancel`, {
+     
+      await axios.delete(`https://localhost:8000/api/v1/jobs/${id}/cancel`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       alert("Cancellation request sent.");
@@ -109,18 +116,17 @@ export default function JobQueue() {
     }
   };
 
- 
   useEffect(() => {
     fetchJobs();
     const interval = setInterval(fetchJobs, 30000);
     return () => clearInterval(interval);
-  }, [fetchJobs]); 
+  }, [fetchJobs]);
 
   const renderStatus = (status) => {
     const s = status?.toUpperCase() || "UNKNOWN";
     let statusClass = "status-badge ";
     if (s === "RUN" || s === "ACTIVE") statusClass += "badge-active";
-    else if (s === "PEND") statusClass += "badge-pending";
+    else if (s === "PEND" || s === "SUBMITTED" || s === "QUEUED") statusClass += "badge-pending";
     else if (s === "DONE" || s === "FINISHED") statusClass += "badge-done";
     else if (s === "EXIT" || s === "FAILED") statusClass += "badge-exit";
     else statusClass += "badge-unknown";
@@ -146,7 +152,7 @@ export default function JobQueue() {
     <div className="job-queue-wrapper">
       <div className="header-actions">
         <h1>HPC Job Monitor</h1>
-    
+
         {error && <span style={{ color: "#dc2626", marginRight: "15px", fontWeight: "bold" }}>{error}</span>}
         <button onClick={fetchJobs} className="btn-refresh-pro">
           {loading ? "Syncing..." : "Refresh Status"}
@@ -154,11 +160,11 @@ export default function JobQueue() {
       </div>
 
       <div className="controls">
-        <input 
+        <input
           className="search-input"
-          placeholder="Filter by Job ID..." 
-          value={search} 
-          onChange={(e) => setSearch(e.target.value)} 
+          placeholder="Filter by Job ID..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
         />
         <select className="filter-select" value={filter} onChange={(e) => setFilter(e.target.value)}>
           <option value="all">All Jobs</option>
