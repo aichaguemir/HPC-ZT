@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
-import api from "../../store/api"; 
+import axios from "axios";
+import { getToken } from "../../store/auth";
 
 export default function JobQueue() {
   const [jobs, setJobs] = useState([]);
@@ -15,32 +16,19 @@ export default function JobQueue() {
   const [page, setPage] = useState(1);
   const jobsPerPage = 5;
 
- 
-  const updateSingleJobStatus = useCallback(async (jobId) => {
-    if (String(jobId).startsWith("pending_")) {
-      return; 
-    }
-    try {
-      const res = await api.get(`/jobs/${jobId}/status`);
-      setJobs(prevJobs =>
-        prevJobs.map(j => (j.job_id === jobId ? { ...j, status: res.data.status } : j))
-      );
-    } catch (err) {
-      console.error(`Status check failed for #${jobId}`);
-    }
-  }, []);
-
   const fetchJobs = useCallback(async () => {
     try {
       setLoading(true);
       setError("");
-      
-      const res = await api.get("/jobs/");
+      const token = getToken();
+     
+      const res = await axios.get("https://localhost:8000/api/v1/jobs/", {
+        headers: { Authorization: `Bearer ${token}` }
+      });
 
       console.log("Jobs fetched from API:", res.data);
 
-    
-      const jobsList = Array.isArray(res.data) ? res.data : (res.data.jobs || []);
+      const jobsList = res.data.jobs || [];
       setJobs(jobsList);
 
       jobsList.forEach(job => {
@@ -54,7 +42,22 @@ export default function JobQueue() {
     } finally {
       setLoading(false);
     }
-  }, [updateSingleJobStatus]);
+  }, []);
+
+  const updateSingleJobStatus = async (jobId) => {
+    try {
+      const token = getToken();
+    
+      const res = await axios.get(`https://localhost:8000/api/v1/jobs/${jobId}/status`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setJobs(prevJobs =>
+        prevJobs.map(j => (j.job_id === jobId ? { ...j, status: res.data.status } : j))
+      );
+    } catch (err) {
+      console.error(`Status check failed for #${jobId}`);
+    }
+  };
 
   const cleanLogText = (text) => {
     if (!text) return "No content available.";
@@ -70,7 +73,12 @@ export default function JobQueue() {
   const fetchJobOutput = async (jobId) => {
     try {
       setSelectedJobId(jobId);
-      const res = await api.get(`/jobs/${jobId}/output`);
+      const token = getToken();
+      
+      const res = await axios.get(`https://localhost:8000/api/v1/jobs/${jobId}/output`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
       setCurrentOutput(cleanLogText(res.data.output));
       setShowModal(true);
     } catch (err) {
@@ -80,7 +88,12 @@ export default function JobQueue() {
 
   const fetchJobError = async (jobId) => {
     try {
-      const res = await api.get(`/jobs/${jobId}/error`);
+      const token = getToken();
+   
+      const res = await axios.get(`https://localhost:8000/api/v1/jobs/${jobId}/error`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
       const cleanedError = cleanLogText(res.data.error);
       alert(`Job #${jobId} Error Log:\n\n${cleanedError}`);
     } catch (err) {
@@ -91,7 +104,11 @@ export default function JobQueue() {
   const cancelJob = async (id) => {
     if (!window.confirm(`Are you sure you want to cancel job #${id}?`)) return;
     try {
-      await api.delete(`/jobs/${id}/cancel`);
+      const token = getToken();
+     
+      await axios.delete(`https://localhost:8000/api/v1/jobs/${id}/cancel`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       alert("Cancellation request sent.");
       fetchJobs();
     } catch (err) {
@@ -108,18 +125,11 @@ export default function JobQueue() {
   const renderStatus = (status) => {
     const s = status?.toUpperCase() || "UNKNOWN";
     let statusClass = "status-badge ";
-
-    if (s === "RUN" || s === "ACTIVE") {
-      statusClass += "badge-active";
-    } else if (s === "PEND" || s === "SUBMITTED" || s === "QUEUED") {
-      statusClass += "badge-pending";
-    } else if (s === "DONE" || s === "FINISHED") {
-      statusClass += "badge-done";
-    } else if (s === "EXIT" || s === "FAILED") {
-      statusClass += "badge-exit";
-    } else {
-      statusClass += "badge-unknown";
-    }
+    if (s === "RUN" || s === "ACTIVE") statusClass += "badge-active";
+    else if (s === "PEND" || s === "SUBMITTED" || s === "QUEUED") statusClass += "badge-pending";
+    else if (s === "DONE" || s === "FINISHED") statusClass += "badge-done";
+    else if (s === "EXIT" || s === "FAILED") statusClass += "badge-exit";
+    else statusClass += "badge-unknown";
 
     return (
       <div className={statusClass}>
@@ -129,18 +139,9 @@ export default function JobQueue() {
     );
   };
 
- 
-  const formatJobId = (jobId) => {
-    if (!jobId) return '';
-    if (String(jobId).startsWith("pending_")) {
-      return "Pending Request";
-    }
-    return `#${jobId}`;
-  };
-
   const filteredJobs = jobs.filter(job => {
     const matchSearch = String(job.job_id).includes(search);
-    const matchFilter = filter === "all" || job.status?.toLowerCase() === filter.toLowerCase();
+    const matchFilter = filter === "all" || job.status.toLowerCase() === filter.toLowerCase();
     return matchSearch && matchFilter;
   });
 
@@ -191,7 +192,7 @@ export default function JobQueue() {
             ) : (
               currentJobs.map(job => (
                 <tr key={job.job_id}>
-                  <td className="job-id-cell">{formatJobId(job.job_id)}</td>
+                  <td className="job-id-cell">#{job.job_id}</td>
                   <td>{renderStatus(job.status)}</td>
                   <td><span className="queue-tag">{job.queue}</span></td>
                   <td>{job.cores} <small>CPUs</small></td>

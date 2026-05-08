@@ -1,0 +1,372 @@
+[
+  {
+    "iteration": 1,
+    "t_auth_ms": 105.21,
+    "t_mfa_send_ms": 42.8,
+    "t_mfa_verify_ms": 65.86,
+    "job_id": "1657",
+    "t_submit_ms": 25569.52,
+    "status": "DONE",
+    "t_complete_ms": 3611.26,
+    "t_total_ms": 29394.65,
+    "error": null
+  },
+  {
+    "iteration": 2,
+    "t_auth_ms": 120.66,
+    "t_mfa_send_ms": 42.05,
+    "t_mfa_verify_ms": 59.82,
+    "job_id": "1658",
+    "t_submit_ms": 26045.55,
+    "status": "DONE",
+    "t_complete_ms": 3261.69,
+    "t_total_ms": 29529.77,
+    "error": null
+  },
+  {
+    "iteration": 3,
+    "t_auth_ms": 113.27,
+    "t_mfa_send_ms": 40.92,
+    "t_mfa_verify_ms": 83.12,
+    "job_id": "1659",
+    "t_submit_ms": 28348.86,
+    "status": "DONE",
+    "t_complete_ms": 4297.7,
+    "t_total_ms": 32883.87,
+    "error": null
+  },
+  {
+    "iteration": 4,
+    "t_auth_ms": 114.9,
+    "t_mfa_send_ms": 41.04,
+    "t_mfa_verify_ms": 87.0,
+    "job_id": "1660",
+    "t_submit_ms": 26731.1,
+    "status": "DONE",
+    "t_complete_ms": 3693.06,
+    "t_total_ms": 30667.1,
+    "error": null
+  },
+  {
+    "iteration": 5,
+    "t_auth_ms": 114.63,
+    "t_mfa_send_ms": 40.87,
+    "t_mfa_verify_ms": 89.75,
+    "error": "429 Client Error: Too Many Requests for url: https://localhost:8000/api/v1/jobs/submit"
+  },
+  {
+    "iteration": 6,
+    "t_auth_ms": 89.71,
+    "t_mfa_send_ms": 43.11,
+    "t_mfa_verify_ms": 79.52,
+    "error": "429 Client Error: Too Many Requests for url: https://localhost:8000/api/v1/jobs/submit"
+  },
+  {
+    "iteration": 7,
+    "t_auth_ms": 93.22,
+    "t_mfa_send_ms": 41.11,
+    "t_mfa_verify_ms": 48.69,
+    "error": "429 Client Error: Too Many Requests for url: https://localhost:8000/api/v1/jobs/submit"
+  },
+  {
+    "iteration": 8,
+    "t_auth_ms": 88.95,
+    "t_mfa_send_ms": 43.64,
+    "t_mfa_verify_ms": 49.59,
+    "error": "429 Client Error: Too Many Requests for url: https://localhost:8000/api/v1/jobs/submit"
+  },
+  {
+    "iteration": 9,
+    "t_auth_ms": 84.28,
+    "t_mfa_send_ms": 41.46,
+    "t_mfa_verify_ms": 59.42,
+    "error": "429 Client Error: Too Many Requests for url: https://localhost:8000/api/v1/jobs/submit"
+  },
+  {
+    "iteration": 10,
+    "t_auth_ms": 85.87,
+    "t_mfa_send_ms": 41.44,
+    "t_mfa_verify_ms": 62.37,
+    "error": "429 Client Error: Too Many Requests for url: https://localhost:8000/api/v1/jobs/submit"
+  },
+  {
+    "iteration": 11,
+    "t_auth_ms": 85.0,
+    "t_mfa_send_ms": 41.46,
+    "t_mfa_verify_ms": 77.96,
+    "error": "429 Client Error: Too Many Requests for url: https://localhost:8000/api/v1/jobs/submit"
+  },
+  {
+    "iteration": 12,
+    "t_auth_ms": 82.88,
+    "t_mfa_send_ms": 41.46,
+    "t_mfa_verify_ms": 76.34,
+    "error": "429 Client Error: Too Many Requests for url: https://localhost:8000/api/v1/jobs/submit"
+  },
+  {
+    "iteration": 13,
+    "t_auth_ms": 83.94,
+    "t_mfa_send_ms": 42.3,
+    "t_mfa_verify_ms": 79.53,
+    "error": "429 Client Error: Too Many Requests for url: https://localhost:8000/api/v1/jobs/submit"
+  },
+  {
+    "iteration": 14,
+    "t_auth_ms": 84.24,
+    "t_mfa_send_ms": 40.33,
+    "t_mfa_verify_ms": 79.62,
+    "error": "429 Client Error: Too Many Requests for url: https://localhost:8000/api/v1/jobs/submit"
+  },
+  {
+    "iteration": 15,
+    "t_auth_ms": 91.37,
+    "t_mfa_send_ms": 49.25,
+    "t_mfa_verify_ms": 62.82,
+    "error": "429 Client Error: Too Many Requests for url: https://localhost:8000/api/v1/jobs/submit"
+  },
+  {
+    "iteration": 16,
+    "t_auth_ms": 82.43,
+    "t_mfa_send_ms": 41.28,
+    "t_mfa_verify_ms": 72.23,
+    "error": "429 Client Error: Too Many Requests for url: https://localhost:8000/api/v1/jobs/submit"
+  },
+  {
+    "iteration": 17,
+    "t_auth_ms": 84.32,
+    "t_mfa_send_ms": 41.07,
+    "t_mfa_verify_ms": 48.56,
+    "error": "429 Client Error: Too Many Requests for url: https://localhost:8000/api/v1/jobs/submit"
+  },
+  {
+    "iteration": 18,
+    "t_auth_ms": 83.52,
+    "t_mfa_send_ms": 40.89,
+    "t_mfa_verify_ms": 80.49,
+    "error": "429 Client Error: Too Many Requests for url: https://localhost:8000/api/v1/jobs/submit"
+  },
+  {
+    "iteration": 19,
+    "t_auth_ms": 83.66,
+    "t_mfa_send_ms": 41.01,
+    "t_mfa_verify_ms": 72.17,
+    "error": "429 Client Error: Too Many Requests for url: https://localhost:8000/api/v1/jobs/submit"
+  },
+  {
+    "iteration": 20,
+    "t_auth_ms": 82.6,
+    "t_mfa_send_ms": 41.59,
+    "t_mfa_verify_ms": 75.41,
+    "error": "429 Client Error: Too Many Requests for url: https://localhost:8000/api/v1/jobs/submit"
+  },
+  {
+    "iteration": 21,
+    "t_auth_ms": 81.94,
+    "t_mfa_send_ms": 40.89,
+    "t_mfa_verify_ms": 59.7,
+    "error": "429 Client Error: Too Many Requests for url: https://localhost:8000/api/v1/jobs/submit"
+  },
+  {
+    "iteration": 22,
+    "t_auth_ms": 83.7,
+    "t_mfa_send_ms": 43.8,
+    "t_mfa_verify_ms": 76.07,
+    "error": "429 Client Error: Too Many Requests for url: https://localhost:8000/api/v1/jobs/submit"
+  },
+  {
+    "iteration": 23,
+    "t_auth_ms": 84.32,
+    "t_mfa_send_ms": 42.2,
+    "t_mfa_verify_ms": 50.84,
+    "error": "429 Client Error: Too Many Requests for url: https://localhost:8000/api/v1/jobs/submit"
+  },
+  {
+    "iteration": 24,
+    "t_auth_ms": 95.2,
+    "t_mfa_send_ms": 41.17,
+    "t_mfa_verify_ms": 77.99,
+    "error": "429 Client Error: Too Many Requests for url: https://localhost:8000/api/v1/jobs/submit"
+  },
+  {
+    "iteration": 25,
+    "t_auth_ms": 82.87,
+    "t_mfa_send_ms": 42.81,
+    "t_mfa_verify_ms": 70.73,
+    "error": "429 Client Error: Too Many Requests for url: https://localhost:8000/api/v1/jobs/submit"
+  },
+  {
+    "iteration": 26,
+    "t_auth_ms": 85.6,
+    "t_mfa_send_ms": 42.45,
+    "t_mfa_verify_ms": 49.34,
+    "error": "429 Client Error: Too Many Requests for url: https://localhost:8000/api/v1/jobs/submit"
+  },
+  {
+    "iteration": 27,
+    "t_auth_ms": 81.45,
+    "t_mfa_send_ms": 41.72,
+    "t_mfa_verify_ms": 48.62,
+    "error": "429 Client Error: Too Many Requests for url: https://localhost:8000/api/v1/jobs/submit"
+  },
+  {
+    "iteration": 28,
+    "t_auth_ms": 85.93,
+    "t_mfa_send_ms": 46.5,
+    "t_mfa_verify_ms": 51.17,
+    "error": "429 Client Error: Too Many Requests for url: https://localhost:8000/api/v1/jobs/submit"
+  },
+  {
+    "iteration": 29,
+    "t_auth_ms": 93.39,
+    "t_mfa_send_ms": 45.09,
+    "t_mfa_verify_ms": 49.58,
+    "error": "429 Client Error: Too Many Requests for url: https://localhost:8000/api/v1/jobs/submit"
+  },
+  {
+    "iteration": 30,
+    "t_auth_ms": 84.87,
+    "t_mfa_send_ms": 41.51,
+    "t_mfa_verify_ms": 48.93,
+    "error": "429 Client Error: Too Many Requests for url: https://localhost:8000/api/v1/jobs/submit"
+  },
+  {
+    "iteration": 31,
+    "t_auth_ms": 81.74,
+    "t_mfa_send_ms": 41.97,
+    "t_mfa_verify_ms": 50.22,
+    "error": "429 Client Error: Too Many Requests for url: https://localhost:8000/api/v1/jobs/submit"
+  },
+  {
+    "iteration": 32,
+    "t_auth_ms": 82.8,
+    "t_mfa_send_ms": 40.77,
+    "t_mfa_verify_ms": 52.44,
+    "error": "429 Client Error: Too Many Requests for url: https://localhost:8000/api/v1/jobs/submit"
+  },
+  {
+    "iteration": 33,
+    "t_auth_ms": 83.82,
+    "t_mfa_send_ms": 41.68,
+    "t_mfa_verify_ms": 47.98,
+    "error": "429 Client Error: Too Many Requests for url: https://localhost:8000/api/v1/jobs/submit"
+  },
+  {
+    "iteration": 34,
+    "t_auth_ms": 84.94,
+    "t_mfa_send_ms": 43.59,
+    "t_mfa_verify_ms": 50.11,
+    "error": "429 Client Error: Too Many Requests for url: https://localhost:8000/api/v1/jobs/submit"
+  },
+  {
+    "iteration": 35,
+    "t_auth_ms": 84.35,
+    "t_mfa_send_ms": 41.5,
+    "t_mfa_verify_ms": 47.33,
+    "error": "429 Client Error: Too Many Requests for url: https://localhost:8000/api/v1/jobs/submit"
+  },
+  {
+    "iteration": 36,
+    "t_auth_ms": 85.8,
+    "t_mfa_send_ms": 43.18,
+    "t_mfa_verify_ms": 48.21,
+    "error": "429 Client Error: Too Many Requests for url: https://localhost:8000/api/v1/jobs/submit"
+  },
+  {
+    "iteration": 37,
+    "t_auth_ms": 80.64,
+    "t_mfa_send_ms": 41.66,
+    "t_mfa_verify_ms": 46.82,
+    "error": "429 Client Error: Too Many Requests for url: https://localhost:8000/api/v1/jobs/submit"
+  },
+  {
+    "iteration": 38,
+    "t_auth_ms": 81.16,
+    "t_mfa_send_ms": 40.58,
+    "t_mfa_verify_ms": 49.22,
+    "error": "429 Client Error: Too Many Requests for url: https://localhost:8000/api/v1/jobs/submit"
+  },
+  {
+    "iteration": 39,
+    "t_auth_ms": 82.31,
+    "t_mfa_send_ms": 41.19,
+    "t_mfa_verify_ms": 47.33,
+    "error": "429 Client Error: Too Many Requests for url: https://localhost:8000/api/v1/jobs/submit"
+  },
+  {
+    "iteration": 40,
+    "t_auth_ms": 81.52,
+    "t_mfa_send_ms": 52.72,
+    "t_mfa_verify_ms": 46.25,
+    "error": "429 Client Error: Too Many Requests for url: https://localhost:8000/api/v1/jobs/submit"
+  },
+  {
+    "iteration": 41,
+    "t_auth_ms": 82.56,
+    "t_mfa_send_ms": 40.46,
+    "t_mfa_verify_ms": 50.41,
+    "error": "429 Client Error: Too Many Requests for url: https://localhost:8000/api/v1/jobs/submit"
+  },
+  {
+    "iteration": 42,
+    "t_auth_ms": 90.88,
+    "t_mfa_send_ms": 41.32,
+    "t_mfa_verify_ms": 48.9,
+    "error": "429 Client Error: Too Many Requests for url: https://localhost:8000/api/v1/jobs/submit"
+  },
+  {
+    "iteration": 43,
+    "t_auth_ms": 81.69,
+    "t_mfa_send_ms": 42.47,
+    "t_mfa_verify_ms": 48.38,
+    "error": "429 Client Error: Too Many Requests for url: https://localhost:8000/api/v1/jobs/submit"
+  },
+  {
+    "iteration": 44,
+    "t_auth_ms": 82.72,
+    "t_mfa_send_ms": 40.36,
+    "t_mfa_verify_ms": 50.17,
+    "error": "429 Client Error: Too Many Requests for url: https://localhost:8000/api/v1/jobs/submit"
+  },
+  {
+    "iteration": 45,
+    "t_auth_ms": 86.68,
+    "t_mfa_send_ms": 41.79,
+    "t_mfa_verify_ms": 48.2,
+    "error": "429 Client Error: Too Many Requests for url: https://localhost:8000/api/v1/jobs/submit"
+  },
+  {
+    "iteration": 46,
+    "t_auth_ms": 80.99,
+    "t_mfa_send_ms": 42.05,
+    "t_mfa_verify_ms": 48.93,
+    "error": "429 Client Error: Too Many Requests for url: https://localhost:8000/api/v1/jobs/submit"
+  },
+  {
+    "iteration": 47,
+    "t_auth_ms": 81.78,
+    "t_mfa_send_ms": 40.48,
+    "t_mfa_verify_ms": 47.52,
+    "error": "429 Client Error: Too Many Requests for url: https://localhost:8000/api/v1/jobs/submit"
+  },
+  {
+    "iteration": 48,
+    "t_auth_ms": 84.4,
+    "t_mfa_send_ms": 41.28,
+    "t_mfa_verify_ms": 60.85,
+    "error": "429 Client Error: Too Many Requests for url: https://localhost:8000/api/v1/jobs/submit"
+  },
+  {
+    "iteration": 49,
+    "t_auth_ms": 82.37,
+    "t_mfa_send_ms": 44.66,
+    "t_mfa_verify_ms": 80.81,
+    "error": "429 Client Error: Too Many Requests for url: https://localhost:8000/api/v1/jobs/submit"
+  },
+  {
+    "iteration": 50,
+    "t_auth_ms": 83.1,
+    "t_mfa_send_ms": 41.25,
+    "t_mfa_verify_ms": 87.15,
+    "error": "429 Client Error: Too Many Requests for url: https://localhost:8000/api/v1/jobs/submit"
+  }
+]

@@ -1,0 +1,155 @@
+{
+  "S1_baseline": {
+    "latency_ms": 5271.82,
+    "signals": {
+      "R1": 0.0,
+      "R2": 0.0,
+      "R3": 0.0,
+      "R4": 0.0,
+      "R5": 0.0,
+      "R7": 0.0,
+      "S2": 0.0
+    },
+    "fail_count": 0,
+    "rho": 0.35,
+    "rho_session": 0.105,
+    "action": "mfa",
+    "active_signals": []
+  },
+  "S2_R7_cred": {
+    "latency_ms": 58.02,
+    "signals": {
+      "R1": 0.0,
+      "R2": 0.0,
+      "R3": 0.0,
+      "R4": 0.0,
+      "R5": 0.0,
+      "R7": 1.0,
+      "S2": 0.0
+    },
+    "fail_count": 5,
+    "rho": 0.35,
+    "rho_session": 0.105,
+    "action": "mfa",
+    "active_signals": [
+      "R7_cred"
+    ]
+  },
+  "S3_R5_rate": {
+    "latency_ms": 5004.03,
+    "signals": {
+      "R1": 0.0,
+      "R2": 0.0,
+      "R3": 0.0,
+      "R4": 0.0,
+      "R5": 0.7,
+      "R7": 0.0,
+      "S2": 0.0
+    },
+    "fail_count": 0,
+    "rho": 0.35,
+    "rho_session": 0.105,
+    "action": "mfa",
+    "active_signals": [
+      "R5_rate"
+    ]
+  },
+  "S4_S2_velocity": {
+    "latency_ms": 6179.58,
+    "signals": {
+      "R1": 0.0,
+      "R2": 0.0,
+      "R3": 0.0,
+      "R4": 0.0,
+      "R5": 0.7,
+      "R7": 0.0,
+      "S2": 0.0
+    },
+    "fail_count": 0,
+    "rho": 0.35,
+    "rho_session": 0.105,
+    "action": "mfa",
+    "active_signals": [
+      "R5_rate"
+    ]
+  },
+  "S5_combo_R2_R7": {
+    "latency_ms": 58.92,
+    "signals": {
+      "R1": 0.0,
+      "R2": 0.0,
+      "R3": 0.0,
+      "R4": 0.0,
+      "R5": 0.7,
+      "R7": 1.0,
+      "S2": 0.0
+    },
+    "fail_count": 5,
+    "rho": 0.441,
+    "rho_session": 0.132,
+    "action": "mfa",
+    "active_signals": [
+      "R5_rate",
+      "R7_cred"
+    ]
+  },
+  "S6_combo_R5_S2": {
+    "latency_ms": 6588.66,
+    "signals": {
+      "R1": 0.0,
+      "R2": 0.0,
+      "R3": 0.0,
+      "R4": 0.0,
+      "R5": 1.0,
+      "R7": 0.0,
+      "S2": 0.0
+    },
+    "fail_count": 0,
+    "rho": 0.441,
+    "rho_session": 0.132,
+    "action": "mfa",
+    "active_signals": [
+      "R5_rate"
+    ]
+  },
+  "S7_decay": {
+    "initial_rho": 0.441,
+    "final_rho": 0.091,
+    "scores": [
+      0.441,
+      0.441,
+      0.441,
+      0.441,
+      0.441,
+      0.441,
+      0.091
+    ],
+    "is_decaying": true,
+    "expected_gamma": 0.9
+  },
+  "S8_tamper": {
+    "tamper_detected": true,
+    "before": {
+      "valid": true,
+      "anchors_checked": 25,
+      "anchors_verified": 25,
+      "latest_anchor": {
+        "entry_count": 250,
+        "latest_hash": "1d9f7be68c339ff3bc5e1f4cf4242753ee777add1479bdbe44181915b329eda5",
+        "anchor_time": "2026-05-04T21:04:00.004400+00:00",
+        "system": "HPC-ZTA-Gateway",
+        "interval": 10,
+        "anchor_hash": "9b31bde17f7523e620878d728a5e3f79b13ba7e89280ef1beba91fe235a9ff5d"
+      },
+      "anchor_file": "/app/audit_anchors/audit_anchors.jsonl",
+      "message": "All 25 external anchors verified \u2014 chain state matches independent anchor records"
+    },
+    "after": {
+      "valid": false,
+      "broken_at": "050f5c50-dfac-48da-bea8-55e5034453d5",
+      "timestamp": "2026-05-04 21:05:37.692859+00:00",
+      "action": "job_submit",
+      "reason": "hash_mismatch \u2014 entry was modified"
+    }
+  }
+}

@@ -1,19 +1,22 @@
-# --- Fichiers Python (Toujours ignorer car ils sont inutiles et créent des conflits) ---
+# Secrets
+.env
+*.env
+
+# Certificates
+certs/
+*.crt
+*.key
+*.pem
+
+# Python
 __pycache__/
-*.py[cod]
-*$py.class
-.venv
-env/
+*.pyc
+
+# Logs
+*.log
+
+# Virtual env
 venv/
 
-# --- Données de la base de données ---
-# On garde l'ignorance ici pour ne pas écraser les données locales des autres
-postgres-data/
-
-# --- Sécurité TEMPORAIREMENT désactivée ---
-# On commente les lignes suivantes pour que les certificats et les .env soient partagés
-# certs/
-# nginx/certs/
-# .env
-# *.crt
-# *.key
+# Node
+node_modules/

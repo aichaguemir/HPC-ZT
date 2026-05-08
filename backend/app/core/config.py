@@ -34,6 +34,12 @@ KEYCLOAK_REALM         = os.getenv("KEYCLOAK_REALM", "")
 KEYCLOAK_CLIENT_ID     = os.getenv("KEYCLOAK_CLIENT_ID", "")
 KEYCLOAK_CLIENT_SECRET = os.getenv("KEYCLOAK_CLIENT_SECRET", "")
 
+
+
+
+SMTP_HOST: str = "hpc-mailhog"
+SMTP_PORT: int = 1025
+SMTP_FROM: str = "noreply@hpc-gateway.local"
 # ==============================
 # JOB LIMITS (fallback — real limits come from policies table)
 # ==============================
