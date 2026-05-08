@@ -15,6 +15,12 @@ from app.db.models import User, AuditLog
 from app.core.logging import logger
 from app.core.carta import get_or_create_session, register_ip
 
+# FIX: import write_audit_entry so register + role_change go through
+# the HMAC chain instead of raw AuditLog() inserts.
+# Raw inserts bypass compute_hash() → chain_hash stays NULL → those
+# events are invisible to verify_chain() and Rekor anchors.
+from app.core.audit_chain import write_audit_entry
+
 
 # ── OAuth2 scheme ──────────────────────────────────────────────────────────
 oauth2_scheme = OAuth2PasswordBearer(
@@ -24,10 +30,10 @@ oauth2_scheme = OAuth2PasswordBearer(
 # ── Public key cache ───────────────────────────────────────────────────────
 _jwks_cache: Optional[dict] = None
 
-# ── Paths allowed before TOTP setup is confirmed ──────────────────────────
-TOTP_SETUP_ALLOWED_PATHS = {
-    "/auth/totp/setup",
-    "/auth/totp/confirm-setup",
+# ── Paths allowed before MFA is verified ──────────────────────────────────
+MFA_SETUP_ALLOWED_PATHS = {
+    "/auth/mfa/send-code",
+    "/auth/mfa/verify-code",
     "/auth/me",
     "/auth/logout",
 }
@@ -109,16 +115,21 @@ async def get_current_user(
             requested_role = user_role,
             is_approved    = False,
             is_active      = True,
-            totp_enabled   = False,
         )
         db.add(user)
         await db.flush()
-        log = AuditLog(
-            user_id = user.user_id,
+
+        # FIX: was raw AuditLog() insert — chain_hash was NULL, event was
+        # invisible to verify_chain() and never anchored to Rekor.
+        # Now goes through write_audit_entry() → HMAC chain → Rekor anchor.
+        await write_audit_entry(
+            db      = db,
             action  = "register",
-            detail  = {"username": username, "source": "keycloak"}
+            result  = "success",
+            user_id = str(user.user_id),
+            detail  = {"username": username, "source": "keycloak"},
         )
-        db.add(log)
+
         await db.commit()
         await db.refresh(user)
         logger.info(f"New user from Keycloak: {username} ({user_role})")
@@ -127,13 +138,21 @@ async def get_current_user(
         if user.role != user_role:
             old_role  = user.role
             user.role = user_role
-            log = AuditLog(
-                user_id = user.user_id,
+
+            # FIX: same — raw insert replaced with write_audit_entry()
+            # so role changes are part of the tamper-evident chain.
+            await write_audit_entry(
+                db      = db,
                 action  = "role_change",
-                detail  = {"old_role": old_role, "new_role": user_role,
-                           "source": "keycloak_sync"}
+                result  = "success",
+                user_id = str(user.user_id),
+                detail  = {
+                    "old_role": old_role,
+                    "new_role": user_role,
+                    "source":   "keycloak_sync",
+                },
             )
-            db.add(log)
+
             await db.commit()
 
     # Step 4 — check account status
@@ -145,26 +164,22 @@ async def get_current_user(
             "Account pending admin approval. "
             "Please wait for an administrator to approve your registration.")
 
-    # ── Step 5 — TOTP gate ────────────────────────────────────────────────
-    # FIX: Admins are EXEMPT from the TOTP gate.
-    # Admin accounts are pre-existing and were created before this flow.
-    # Blocking them would lock out the entire system with no recovery path.
-    # All non-admin approved users MUST complete TOTP setup before proceeding.
-    if user.role != "admin" and not user.totp_enabled:
+    # ── Step 5 — Email OTP gate ───────────────────────────────────────────
+    if user.role != "admin" and not user.email_otp_verified:
         path    = request.url.path.rstrip("/")
-        allowed = any(path.endswith(p) for p in TOTP_SETUP_ALLOWED_PATHS)
+        allowed = any(path.endswith(p) for p in MFA_SETUP_ALLOWED_PATHS)
         if not allowed:
             raise HTTPException(
                 status_code=403,
                 detail={
-                    "code":        "totp_setup_required",
+                    "code":        "mfa_required",
                     "message":     (
-                        "You must set up two-factor authentication before "
-                        "continuing. Visit /auth/totp/setup, scan the QR code, "
-                        "then confirm at /auth/totp/confirm-setup."
+                        "You must verify your identity before continuing. "
+                        "POST to /auth/mfa/send-code to receive a code by email, "
+                        "then verify it at /auth/mfa/verify-code."
                     ),
-                    "setup_url":   "/auth/totp/setup",
-                    "confirm_url": "/auth/totp/confirm-setup",
+                    "send_url":   "/auth/mfa/send-code",
+                    "verify_url": "/auth/mfa/verify-code",
                 }
             )
 

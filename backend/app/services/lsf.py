@@ -1,7 +1,7 @@
 from app.core.config import REMOTE_JOB_DIR
 from typing import Optional
 
-PYTHON_BIN = ""
+PYTHON_BIN = "/home/mfahci/anaconda3/bin/python3"
 
 
 def generate_sandbox_wrapper(unique_id: str) -> str:

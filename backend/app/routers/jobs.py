@@ -357,44 +357,37 @@ async def submit_job(
 # STATUS
 # ══════════════════════════════════════════════════════════════════════════
 
-@router.get("/api/v1/jobs/{job_id}/status")
-async def get_job_status(job_id: str):
-    # Handle temporary/pending job IDs without calling LSF
-    if not re.match("^[0-9]+$", job_id):
-        return {
-            "job_id": job_id,
-            "status": "UNKNOWN",
-            "detail": "Pending cluster assignment"
-        }
+@router.get("/{job_id}/status", response_model=JobStatusResponse)
+async def get_job_status(
+    job_id:       str,
+    db:           AsyncSession = Depends(get_db),
+    current_user: User         = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(Job)
+        .where(Job.job_id == job_id)
+        .where(Job.user_id == current_user.user_id)
+    )
+    job = result.scalar_one_or_none()
+    if job is None:
+        raise HTTPException(404, "Job not found")
 
-    # Query LSF for numeric job IDs
-    try:
-        command = f"{LSF_PATH}/bjobs {job_id} 2>/dev/null || true"
-        lsf_result = await run_ssh_async(command)
-        
-        # Parse LSF output safely
-        status_map = {}
-        lines = lsf_result.strip().splitlines()
+    lsf_result = await run_ssh_async(f"{LSF_PATH}/bjobs {job_id}")
+    lines      = lsf_result.strip().splitlines()
 
-        if len(lines) >= 2:
-            for line in lines[1:]:
-                parts = line.split()
-                if len(parts) >= 3:
-                    status_map[parts[0]] = parts[2]
+    if len(lines) < 2 or "not found" in lsf_result.lower():
+        return JobStatusResponse(job_id=job_id, status="UNKNOWN", queue="N/A", cores="N/A")
 
-        lsf_status = status_map.get(job_id)
-        if lsf_status:
-            return {"job_id": job_id, "status": lsf_status}
-        
-        # If the job is not listed in LSF, it is likely finished
-        return {"job_id": job_id, "status": "DONE"}
-    
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to fetch job status: {str(e)}"
-        )
+    parts = lines[1].split()
+    if len(parts) < 4:
+        return JobStatusResponse(job_id=job_id, status="UNKNOWN", queue="N/A", cores="N/A")
 
+    job.status = parts[2]
+    await db.commit()
+
+    return JobStatusResponse(
+        job_id=parts[0], status=parts[2], queue=parts[3], cores="N/A"
+    )
 
 
 # ══════════════════════════════════════════════════════════════════════════

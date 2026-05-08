@@ -1,0 +1,23 @@
+Table I: HPC-ZT gateway component latency (N=100 trials each)
+
+Component                | Median   | Mean     | σ       | Notes
+-------------------------|----------|----------|---------|------------------
+JWT verification         | 38.45ms  | 38.70ms  | 1.52ms  | JWKS cached
+AST scan — simple        | 0.058ms  | 0.060ms  | 0.012ms | <50 nodes
+AST scan — medium        | 0.236ms  | 0.244ms  | 0.028ms | 50–200 nodes
+AST scan — complex       | 0.331ms  | 0.341ms  | 0.029ms | >200 nodes
+AST scan — malicious     | 0.026ms  | 0.027ms  | 0.004ms | early-exit
+Sandbox script gen       | 0.300ms  | 0.590ms  | 0.831ms | template render
+LSF script gen           | 2.800ms  | 3.800ms  | 2.155ms | bsub wrapper
+─────────────────────────────────────────────────────────────────
+Gateway total (approx)   | ~42ms    |          |         | excl. SFTP+SSH
+End-to-end (with LSF)    | ~13s     |          | 15.0s   | queue-dominated
+
+
+
+
+Malicious: 0.026ms  ←  early-exit on first violation
+Benign:    0.058ms  ←  must traverse full AST
+Complex:   0.331ms  ←  large script, full traversal
+
+

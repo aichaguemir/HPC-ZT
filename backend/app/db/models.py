@@ -37,12 +37,12 @@ class AuditAction(str, enum.Enum):
 
 USER_ROLE_TYPE = PG_ENUM(
     'student', 'researcher', 'admin',
-    name='user_role', create_type=False
+    name='user_role', create_type=True
 )
 
 JOB_STATUS_TYPE = PG_ENUM(
     'PEND', 'RUN', 'DONE', 'EXIT',
-    name='job_status', create_type=False
+    name='job_status', create_type=True
 )
 
 AUDIT_ACTION_TYPE = PG_ENUM(
@@ -50,12 +50,12 @@ AUDIT_ACTION_TYPE = PG_ENUM(
     'job_submit', 'job_cancel', 'job_flagged',
     'view_output', 'view_error', 'role_change',
     'policy_change', 'session_revoke', 'register',
-    name='audit_action', create_type=False
+    name='audit_action', create_type=True
 )
 
 REVOKE_REASON_TYPE = PG_ENUM(
     'logout', 'admin_revoke', 'suspicious_activity', 'password_change',
-    name='revoke_reason', create_type=False
+    name='revoke_reason', create_type=True
 )
 
 
@@ -81,9 +81,9 @@ class User(Base):
     is_active       : Mapped[bool]     = mapped_column(Boolean, default=True, nullable=False)
     is_approved    : Mapped[bool]      = mapped_column(Boolean, default=False, nullable=False)
     requested_role : Mapped[str]       = mapped_column(String, nullable=True)
-    totp_secret    : Mapped[str] = mapped_column(String, nullable=True)
-    totp_enabled   :  Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    temp_totp_secret: Mapped[str] = mapped_column(String, nullable=True)
+    email_otp_code      : Mapped[str]      = mapped_column(String, nullable=True)
+    email_otp_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    email_otp_verified  : Mapped[bool]     = mapped_column(Boolean, default=False, nullable=False)
 
     failed_attempts : Mapped[int]      = mapped_column(Integer, default=0, nullable=False)
     locked_until    : Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)

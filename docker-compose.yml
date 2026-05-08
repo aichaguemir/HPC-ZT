@@ -1,5 +1,5 @@
 services:
- 
+
   postgres:
     image: postgres:16
     container_name: hpc-postgres
@@ -9,11 +9,11 @@ services:
     environment:
       POSTGRES_USER: hpcuser
       POSTGRES_PASSWORD: ***REMOVED***
-      POSTGRES_DB: hpc_portal
+      POSTGRES_DB: hpc_gateway
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U hpcuser -d hpc_portal"]
+      test: ["CMD-SHELL", "pg_isready -U hpcuser -d hpc_gateway"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -21,8 +21,14 @@ services:
     networks:
       - hpc-net
 
-
-
+  mailhog:
+    image: mailhog/mailhog
+    container_name: hpc-mailhog
+    restart: unless-stopped
+    ports:
+      - "8025:8025"
+    networks:
+      - hpc-net
 
   keycloak:
     image: quay.io/keycloak/keycloak:26.0.0
@@ -32,7 +38,7 @@ services:
       - ./backend/.env
     environment:
       KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://hpc-postgres:5432/hpc_portal
+      KC_DB_URL: jdbc:postgresql://hpc-postgres:5432/hpc_gateway
       KC_DB_USERNAME: hpcuser
       KC_DB_PASSWORD: ***REMOVED***
       KEYCLOAK_ADMIN: admin
@@ -60,8 +66,6 @@ services:
     networks:
       - hpc-net
 
- 
-
   fastapi:
     build:
       context: .
@@ -75,17 +79,24 @@ services:
     env_file:
       - ./backend/.env
     volumes:
-      - ./certs:/app/certs:ro
+      - ./certs:/app/certs:ro 
+      - audit-anchors:/app/audit_anchors
     command: >
-      sh -c "pip install uvicorn fastapi && python -m uvicorn main:app --host 0.0.0.0 --port 8000 --ssl-keyfile /app/certs/fastapi.key --ssl-certfile /app/certs/fastapi.crt"
+      sh -c "pip install uvicorn fastapi && python -m uvicorn main:app --host 0.0.0.0 --port 8000 --ssl-keyfile /app/certs/fastapi.key --ssl-certfile /app/certs/fastapi.crt --ssl-ca-certs /app/certs/ca.crt --ssl-cert-reqs 2"
     expose:
       - "8000"
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request, ssl; ctx = ssl._create_unverified_context(); urllib.request.urlopen('https://localhost:8000/health', context=ctx)"]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request,ssl; ctx=ssl.create_default_context(); ctx.load_cert_chain('/app/certs/client.crt','/app/certs/client.key'); ctx.check_hostname=False;            ctx.verify_mode=ssl.CERT_NONE; urllib.request.urlopen('https://localhost:8000/health',context=ctx)"
+        ]
       interval: 15s
       timeout: 5s
       retries: 3
-      start_period: 20s
+      start_period: 30s
     depends_on:
       postgres:
         condition: service_healthy
@@ -94,7 +105,6 @@ services:
     networks:
       - hpc-net
 
- 
   frontend:
     build: ./frontend
     container_name: hpc-frontend
@@ -109,7 +119,6 @@ services:
     networks:
       - hpc-net
 
- 
   nginx:
     image: nginx:alpine
     container_name: hpc-nginx
@@ -136,3 +145,4 @@ networks:
 
 volumes:
   postgres-data:
+  audit-anchors:
