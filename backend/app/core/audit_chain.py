@@ -455,6 +455,7 @@ async def _submit_to_rekor(anchor_hash: str) -> Optional[dict]:
         ref = {
             "log_index":       entry_data.get("logIndex"),
             "uuid":            uuid,
+            "entry_count":  entry_count,
             "anchor_hash":     anchor_hash,
             "artifact_sha256": artifact_sha256,
             "integrated_time": entry_data.get("integratedTime"),
@@ -507,7 +508,7 @@ async def maybe_submit_rekor_anchor(
     if count == 0 or count % ANCHOR_INTERVAL != 0:
         return None
 
-    return await _submit_to_rekor(anchor_hash)
+    return await _submit_to_rekor(anchor_hash, count)
 
 
 def _save_rekor_ref(ref: dict) -> bool:
