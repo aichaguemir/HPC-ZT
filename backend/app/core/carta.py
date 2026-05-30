@@ -58,7 +58,7 @@ COMBO_MULTIPLIERS = {
 # DECISION THRESHOLDS — empirically calibrated
 # ══════════════════════════════════════════════════════════════════════════
 
-THRESHOLD_FLAG  = 0.20   # τ₁: ρ ≥ 0.20 → flag
+THRESHOLD_FLAG  = 0.13   # τ₁: ρ ≥ 0.20 → flag
 THRESHOLD_MFA   = 0.40   # τ₂: ρ ≥ 0.40 → MFA required
 THRESHOLD_BLOCK = 0.80   # τ₃: ρ ≥ 0.80 → block unconditionally
 

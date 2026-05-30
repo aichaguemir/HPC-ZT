@@ -24,7 +24,7 @@ from app.services.ssh import run_ssh_async, transfer_files
 from app.services.lsf import generate_lsf, generate_sandbox_wrapper
 from app.core.carta import run_carta, apply_carta_result, get_or_create_session
 from app.core.audit_chain import write_audit_entry
-from app.core.dynamic_allocation import get_cluster_state, get_allocation_options
+from app.core.dynamic_allocation import get_cluster_state, get_allocation_options, validate_mpi_params
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -54,8 +54,8 @@ async def submit_job(
     wall_time_hours:   int          = Form(...),
     wall_time_minutes: int          = Form(...),
     job_type:          str          = Form("serial"),
-    chunks:            Optional[int]= Form(None),
-    cores_per_chunk:   Optional[int]= Form(None),
+    mpi_processes:     Optional[int]= Form(None),
+    mpi_ptile:         Optional[int]= Form(None),
     request:           Request      = None,
     db:                AsyncSession = Depends(get_db),
     current_user_and_token          = Depends(get_current_user_and_token),
@@ -134,22 +134,18 @@ async def submit_job(
             detail=f"Rate limit exceeded. Max {rate_limit} submissions/minute "
                    f"for {current_user.role} role.")
 
-    # ⑨ Validate parallel job parameters
-    if job_type == "parallel":
+    # ⑨ Validate MPI job parameters
+    if job_type == "mpi":
         if current_user.role == "student":
-            raise HTTPException(400,
-                "Parallel jobs require researcher or admin role")
-        if not chunks or chunks < 2:
-            raise HTTPException(400, "Parallel jobs require chunks >= 2")
-        if not cores_per_chunk or cores_per_chunk < 1:
-            raise HTTPException(400, "Parallel jobs require cores_per_chunk >= 1")
-        if chunks * cores_per_chunk > policy.max_cores_per_job:
-            raise HTTPException(400,
-                f"Total cores ({chunks * cores_per_chunk}) exceeds "
-                f"policy limit ({policy.max_cores_per_job}) for {current_user.role} role.")
-        if cores_per_chunk > 16:
-            raise HTTPException(400,
-                "cores_per_chunk cannot exceed 16 (node capacity)")
+            raise HTTPException(400, "MPI jobs require researcher or admin role")
+        if not mpi_processes or not mpi_ptile:
+            raise HTTPException(400, "MPI jobs require mpi_processes and mpi_ptile")
+        validate_mpi_params(
+            processes = mpi_processes,
+            ptile     = mpi_ptile,
+            role      = current_user.role,
+            max_cores = policy.max_cores_per_job,
+        )
 
     # ⑩ Insert pending job
     unique_id   = str(uuid.uuid4())
@@ -265,9 +261,9 @@ async def submit_job(
                     unique_id, current_user.username,
                     params.cores, params.memory, params.queue,
                     params.wall_time_hours, params.wall_time_minutes,
-                    job_type        = job_type,
-                    chunks          = chunks,
-                    cores_per_chunk = cores_per_chunk,
+                    job_type      = job_type,
+                    mpi_processes = mpi_processes,
+                    mpi_ptile     = mpi_ptile,
                 ))
 
             await transfer_files(
@@ -319,8 +315,8 @@ async def submit_job(
                     "queue":         params.queue,
                     "script":        file.filename,
                     "job_type":      job_type,
-                    "chunks":        chunks,
-                    "cores_per_chunk": cores_per_chunk,
+                    "mpi_processes": mpi_processes,
+                    "mpi_ptile":     mpi_ptile,
                     "carta_score":   carta_result["session_score"],
                     "carta_signals": carta_result["signals"],
                     "carta_level":   carta_result["level"],
@@ -415,57 +411,21 @@ async def get_job_output(
     job_user    = user_result.scalar_one_or_none()
     job_workdir = f"{REMOTE_JOB_DIR}/{job_user.username}/job_{job.unique_id}"
 
-    # ── Try serial output first ────────────────────────────────
+    # Both serial and MPI jobs write to a single output file
     serial_cmd = (
         f"test -f {job_workdir}/output_{job.unique_id}.log "
         f"&& tail -n 500 {job_workdir}/output_{job.unique_id}.log "
         f"|| echo 'NOT_FOUND'"
     )
-    serial_out = await run_ssh_async(serial_cmd)
+    output = await run_ssh_async(serial_cmd)
 
-    if serial_out.strip() != "NOT_FOUND":
-        output = serial_out
-    else:
-        # ── Try parallel chunk outputs ─────────────────────────
-        # Collect output_{uuid}_1.log, _2.log, etc.
-        chunk_cmd = (
-            f"ls {job_workdir}/output_{job.unique_id}_*.log "
-            f"2>/dev/null | sort -t_ -k1 -V"
+    if output.strip() == "NOT_FOUND":
+        return JobOutputResponse(
+            job_id=job_id,
+            output="Output not available yet. Job may still be running."
         )
-        chunk_files = await run_ssh_async(chunk_cmd)
 
-        if not chunk_files.strip():
-            return JobOutputResponse(
-                job_id=job_id,
-                output="Output not available yet. Job may still be running."
-            )
-
-        # Read each chunk file and combine
-        combined = []
-        for chunk_file in chunk_files.strip().splitlines():
-            chunk_file = chunk_file.strip()
-            if not chunk_file:
-                continue
-            # Extract chunk index from filename
-            idx = chunk_file.split("_")[-1].replace(".log", "")
-            content = await run_ssh_async(
-                f"tail -n 200 {chunk_file} 2>/dev/null || echo ''"
-            )
-            # Strip LSF header boilerplate, keep only actual output
-            marker = "The output (if any) follows:"
-            if marker in content:
-                content = content.split(marker, 1)[1].strip()
-            if content.strip():
-                combined.append(f"=== Chunk {idx} ===\n{content.strip()}")
-
-        if not combined:
-            return JobOutputResponse(
-                job_id=job_id,
-                output="No output produced by any chunk."
-            )
-        output = "\n\n".join(combined)
-
-    # Strip LSF boilerplate from serial output
+    # Strip LSF boilerplate
     marker = "The output (if any) follows:"
     if marker in output:
         output = output.split(marker, 1)[1].strip()
@@ -502,10 +462,8 @@ async def get_job_error(
     job_user    = user_result.scalar_one_or_none()
     job_workdir = f"{REMOTE_JOB_DIR}/{job_user.username}/job_{job.unique_id}"
 
-    # For parallel jobs, collect all chunk errors
+    # Both serial and MPI jobs write to a single error file
     check_cmd = (
-        f"ls {job_workdir}/error_{job.unique_id}_*.log 2>/dev/null && "
-        f"cat {job_workdir}/error_{job.unique_id}_*.log || "
         f"test -f {job_workdir}/error_{job.unique_id}.log && "
         f"tail -n 500 {job_workdir}/error_{job.unique_id}.log || "
         f"echo 'ERROR_NOT_READY'"
@@ -628,8 +586,9 @@ async def cluster_state(
 async def allocation_options(
     cores:        int,
     memory:       int,
-    job_type:     str  = "serial",
-    current_user: User = Depends(get_current_user),
+    job_type:     str           = "serial",
+    mpi_ptile:    Optional[int] = None,
+    current_user: User          = Depends(get_current_user),
 ):
     """Returns allocation options based on current cluster state."""
     return await get_allocation_options(
@@ -637,4 +596,5 @@ async def allocation_options(
         requested_memory = memory,
         role             = current_user.role,
         job_type         = job_type,
+        mpi_ptile        = mpi_ptile,
     )

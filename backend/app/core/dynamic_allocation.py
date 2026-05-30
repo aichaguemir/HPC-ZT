@@ -1,16 +1,6 @@
-"""
-Dynamic Resource Allocation Engine
-====================================
-Provides real-time cluster state and allocation options.
 
-Two features:
-  1. get_cluster_state()      → parse bhosts, return node data
-  2. get_allocation_options() → offer user: wait OR throttled
-  3. compute_lsf_params()     → decide serial vs MPI LSF params
-"""
 from datetime import datetime, timezone, timedelta
 from typing import Optional
-from dataclasses import dataclass
 
 from app.core.logging import logger
 from app.services.ssh import run_ssh_async
@@ -153,21 +143,24 @@ async def get_allocation_options(
     requested_memory: int,
     role:             str,
     job_type:         str = "serial",
+    mpi_ptile:        Optional[int] = None,   # required when job_type == "mpi"
 ) -> dict:
     """
     Given what a user wants, return what the cluster can offer NOW.
 
-    Returns two options:
-      1. wait      → submit with full requested resources, may queue
-      2. throttled → reduce cores to what's available now, runs immediately
+    Serial / multicore:
+      option 1 — wait: submit with full requested cores, may queue
+      option 2 — throttled: reduce to what's free on one node, runs now
 
-    For MPI jobs: also checks if ptile distribution is possible.
+    MPI multi-node:
+      option 1 — wait: submit full rank count, may queue
+      option 2 — throttled: reduce to fewer nodes using available ptile slots
+      (No single-node fallback for MPI — that changes the job semantics.)
     """
-    state = await get_cluster_state()
-    util  = state["utilization"]
+    state    = await get_cluster_state()
+    util     = state["utilization"]
     util_pct = util * 100
 
-    # Get usable nodes sorted by free_cores descending
     usable_nodes = sorted(
         [n for n in state["nodes"] if n["available"] and n["free_cores"] > 0],
         key=lambda n: n["free_cores"],
@@ -176,7 +169,79 @@ async def get_allocation_options(
 
     options = []
 
-    # ── Option 1: Wait for full allocation ────────────────────────────────
+    # ── MPI: multi-node path ───────────────────────────────────────────────
+    if job_type == "mpi" and mpi_ptile:
+        nodes_needed  = requested_cores // mpi_ptile
+
+        # Count nodes that can host a full ptile slice
+        capable_nodes = [
+            n for n in usable_nodes if n["free_cores"] >= mpi_ptile
+        ]
+        can_run_now   = len(capable_nodes) >= nodes_needed
+
+        if can_run_now:
+            wait_estimate = "immediate"
+        elif util_pct < 50:
+            wait_estimate = "< 30 minutes"
+        elif util_pct < 80:
+            wait_estimate = "~1-2 hours"
+        else:
+            wait_estimate = "~2-4 hours"
+
+        options.append({
+            "id":             "wait",
+            "label":          f"Submit with full {requested_cores} ranks ({nodes_needed} nodes)",
+            "cores":          requested_cores,
+            "memory":         requested_memory,
+            "mpi_processes":  requested_cores,
+            "mpi_ptile":      mpi_ptile,
+            "nodes_needed":   nodes_needed,
+            "available_now":  can_run_now,
+            "estimated_wait": wait_estimate,
+            "note": (
+                "Resources available now" if can_run_now
+                else f"Need {nodes_needed} nodes with {mpi_ptile} free cores each; "
+                     f"only {len(capable_nodes)} currently available"
+            ),
+        })
+
+        # Throttled MPI: use as many capable nodes as are ready right now
+        if not can_run_now and len(capable_nodes) >= 2:
+            throttled_nodes    = len(capable_nodes)
+            throttled_procs    = throttled_nodes * mpi_ptile
+            throttled_memory   = max(
+                256,
+                int(requested_memory * (throttled_procs / requested_cores))
+            )
+            options.append({
+                "id":             "throttled",
+                "label":          f"Run now with {throttled_procs} ranks ({throttled_nodes} nodes)",
+                "cores":          throttled_procs,
+                "memory":         throttled_memory,
+                "mpi_processes":  throttled_procs,
+                "mpi_ptile":      mpi_ptile,
+                "nodes_needed":   throttled_nodes,
+                "available_now":  True,
+                "estimated_wait": "immediate",
+                "note": (
+                    f"Reduced from {requested_cores} to {throttled_procs} ranks "
+                    f"({nodes_needed} → {throttled_nodes} nodes) "
+                    f"due to {util_pct:.0f}% cluster load."
+                ),
+            })
+
+        return {
+            "cluster_utilization":  f"{util_pct:.0f}%",
+            "cluster_free_cores":   state["free_cores"],
+            "cluster_total_cores":  state["total_cores"],
+            "capable_nodes_for_mpi": len(capable_nodes),
+            "requested_cores":      requested_cores,
+            "mpi_ptile":            mpi_ptile,
+            "job_type":             "mpi",
+            "options":              options,
+        }
+
+    # ── Serial / multicore: single-node path ──────────────────────────────
     can_run_now = state["free_cores"] >= requested_cores
     if can_run_now:
         wait_estimate = "immediate"
@@ -194,21 +259,19 @@ async def get_allocation_options(
         "memory":         requested_memory,
         "available_now":  can_run_now,
         "estimated_wait": wait_estimate,
-        "note":           "Job will run when resources are available"
-                          if not can_run_now else "Resources available now",
+        "note": (
+            "Resources available now" if can_run_now
+            else "Job will run when resources are available"
+        ),
     })
 
-    # ── Option 2: Throttled — run now with less ────────────────────────────
     if not can_run_now and usable_nodes:
-        best_node       = usable_nodes[0]   # node with most free cores
-        throttled_cores = min(requested_cores, best_node["free_cores"])
-
-        # Scale memory proportionally
-        throttled_memory = int(
-            requested_memory * (throttled_cores / requested_cores)
+        best_node        = usable_nodes[0]
+        throttled_cores  = min(requested_cores, best_node["free_cores"])
+        throttled_memory = max(
+            256,
+            int(requested_memory * (throttled_cores / requested_cores))
         )
-        throttled_memory = max(256, throttled_memory)   # minimum 256MB
-
         if throttled_cores > 0 and throttled_cores < requested_cores:
             options.append({
                 "id":             "throttled",
@@ -250,16 +313,16 @@ def compute_lsf_params(
     """
     Returns LSF directive parameters based on job type.
 
-    Serial:
+    Serial / multicore (single node):
         -n {cores}
         -R "rusage[mem={memory}] span[hosts=1]"
 
-    MPI:
+    MPI (multi-node):
         -n {processes}
-        -R "rusage[mem={memory}] span[ptile={ptile}]"
-        mpirun -np {processes} python3 sandbox.py
+        -R "select[...exclusions && status==ok] span[ptile={ptile}]"
+        mpirun -TCP -np $LSB_DJOB_NUMPROC -hostfile $MPI_HOSTS python3 sandbox.py
 
-    Returns dict used by generate_lsf().
+    Keys returned map directly to generate_lsf() parameters.
     """
     if job_type == "mpi":
         if not processes or not ptile:
@@ -267,24 +330,25 @@ def compute_lsf_params(
 
         nodes_needed = processes // ptile
         return {
-            "job_type":     "mpi",
-            "bsub_n":       processes,
-            "resource_req": f'rusage[mem={memory}] span[ptile={ptile}]',
-            "node_flag":    f'-m "{target_node}"' if target_node else "",
-            "exec_prefix":  f"mpirun -np {processes}",
-            "nodes_needed": nodes_needed,
-            "note":         f"MPI: {processes} processes, "
-                            f"{ptile} per node, {nodes_needed} nodes",
+            "job_type":      "mpi",
+            "mpi_processes": processes,       # → generate_lsf(mpi_processes=)
+            "mpi_ptile":     ptile,           # → generate_lsf(mpi_ptile=)
+            "cores":         processes,       # total cores for policy check
+            "nodes_needed":  nodes_needed,
+            "note": (
+                f"MPI: {processes} ranks across {nodes_needed} nodes "
+                f"({ptile} ranks/node)"
+            ),
         }
     else:
         return {
-            "job_type":     "serial",
-            "bsub_n":       cores,
-            "resource_req": f'rusage[mem={memory}] span[hosts=1]',
-            "node_flag":    f'-m "{target_node}"' if target_node else "",
-            "exec_prefix":  "",
-            "nodes_needed": 1,
-            "note":         f"Serial: {cores} cores on single node",
+            "job_type":      "serial",
+            "cores":         cores,
+            "mpi_processes": None,
+            "mpi_ptile":     None,
+            "target_node":   target_node,
+            "nodes_needed":  1,
+            "note":          f"Serial: {cores} cores on single node",
         }
 
 
