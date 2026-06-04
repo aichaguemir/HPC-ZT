@@ -117,8 +117,8 @@ async def approve_user(
         raise HTTPException(400, "User is already approved")
 
     # Generate temp secret now — totp_enabled stays False until user confirms
-    secret = pyotp.random_base32()
-    target.temp_totp_secret = secret
+    #secret = pyotp.random_base32()
+    #target.temp_totp_secret = secret
     target.is_approved      = True
 
     if target.requested_role and target.requested_role != target.role:

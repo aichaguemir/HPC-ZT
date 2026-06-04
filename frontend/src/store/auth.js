@@ -1,7 +1,7 @@
 const KEYCLOAK_URL    = "https://localhost:8443";
 const KEYCLOAK_REALM  = "HPC-Project";
 const KEYCLOAK_CLIENT = "hpc-backend";
-const API_URL         = "https://localhost:8000/api/v1";
+const API_URL         = "https://localhost/api/v1";
 
 // ── Token storage ──────────────────────────────────────────────────────────
 

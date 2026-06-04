@@ -18,6 +18,8 @@ from sqlalchemy import select, func as sqlfunc
 
 from app.db.models import AuditLog
 from app.core.logging import logger
+import asyncio
+_AUDIT_LOCK = asyncio.Lock()
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -397,7 +399,8 @@ def read_anchors() -> list[dict]:
 #
 # What's NOT on Rekor: user IDs, actions, IP addresses, any audit content.
 
-async def _submit_to_rekor(anchor_hash: str) -> Optional[dict]:
+async def _submit_to_rekor(anchor_hash: str, entry_count: int) -> Optional[dict]:
+
     """
     Submits anchor_hash to Rekor as a hashedrekord entry.
     Returns ref dict {log_index, uuid, ...} on success, None on failure.
@@ -455,7 +458,7 @@ async def _submit_to_rekor(anchor_hash: str) -> Optional[dict]:
         ref = {
             "log_index":       entry_data.get("logIndex"),
             "uuid":            uuid,
-            "entry_count":  entry_count,
+            "entry_count":     entry_count, 
             "anchor_hash":     anchor_hash,
             "artifact_sha256": artifact_sha256,
             "integrated_time": entry_data.get("integratedTime"),
@@ -509,6 +512,7 @@ async def maybe_submit_rekor_anchor(
         return None
 
     return await _submit_to_rekor(anchor_hash, count)
+
 
 
 def _save_rekor_ref(ref: dict) -> bool:
@@ -614,42 +618,47 @@ async def write_audit_entry(
     normalized_result  = result  or "success"
     normalized_detail  = detail  or {}
 
-    # [2] Get H_{i-1}
-    now       = datetime.now(timezone.utc)
-    prev_hash = await get_last_hash(db)
+    now = datetime.now(timezone.utc)
 
-    # [3] Compute H_i
-    h_i = compute_hash(
-        prev_hash = prev_hash,
-        timestamp = now,
-        user_id   = normalized_user_id,
-        action    = action,
-        result    = normalized_result,
-        detail    = normalized_detail,
-    )
+    # ──────────────────────────────────────────────────────────────────
+    # Critical section – must be serialized to avoid chain forks
+    # ──────────────────────────────────────────────────────────────────
+    async with _AUDIT_LOCK:
+        # [2] Get H_{i-1}
+        prev_hash = await get_last_hash(db)
 
-    # [4] Write to DB + flush
-    entry = AuditLog(
-        user_id    = normalized_user_id,
-        job_id     = job_id,
-        action     = action,
-        result     = normalized_result,
-        ip_address = ip_address,
-        detail     = normalized_detail,
-        chain_hash = h_i,
-        prev_hash  = prev_hash,
-        timestamp  = now,
-    )
-    db.add(entry)
-    await db.flush()   # ← makes entry visible to COUNT in steps 5 and 6
+        # [3] Compute H_i
+        h_i = compute_hash(
+            prev_hash = prev_hash,
+            timestamp = now,
+            user_id   = normalized_user_id,
+            action    = action,
+            result    = normalized_result,
+            detail    = normalized_detail,
+        )
 
+        # [4] Write to DB + flush
+        entry = AuditLog(
+            user_id    = normalized_user_id,
+            job_id     = job_id,
+            action     = action,
+            result     = normalized_result,
+            ip_address = ip_address,
+            detail     = normalized_detail,
+            chain_hash = h_i,
+            prev_hash  = prev_hash,
+            timestamp  = now,
+        )
+        db.add(entry)
+        await db.flush()   # entry is now visible
+
+    # ──────────────────────────────────────────────────────────────────
+    # Anchor and Rekor submission – outside the lock (non‑critical)
+    # ──────────────────────────────────────────────────────────────────
     # [5] Local anchor (every ANCHOR_INTERVAL entries)
     local_anchor = await maybe_write_anchor(db, h_i)
 
-    # [6] Rekor anchor (same boundary — only if local anchor was written)
-    #     We use local_anchor["anchor_hash"] as the Rekor artifact.
-    #     This ties the Rekor entry to the full anchor snapshot,
-    #     not just the raw chain hash.
+    # [6] Rekor anchor (only if local anchor was written)
     if local_anchor is not None:
         await maybe_submit_rekor_anchor(db, local_anchor["anchor_hash"])
 

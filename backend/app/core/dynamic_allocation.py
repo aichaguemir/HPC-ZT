@@ -1,4 +1,4 @@
-
+from app.core.dynamic_allocation import get_cluster_state
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
@@ -355,23 +355,21 @@ def compute_lsf_params(
 # ══════════════════════════════════════════════════════════════════════════
 # STEP 4 — MPI VALIDATION
 # ══════════════════════════════════════════════════════════════════════════
-
-def validate_mpi_params(
-    processes:   int,
-    ptile:       int,
-    role:        str,
-    max_cores:   int,   # from policy
+async def validate_mpi_params(
+    processes: int,
+    ptile: int,
+    role: str,
+    max_cores: int,   # policy max cores (still needed for total processes check)
 ) -> None:
     """
-    Validates MPI job parameters.
+    Validates MPI job parameters against cluster node capacity.
     Raises HTTPException with clear message if invalid.
     """
     from fastapi import HTTPException
 
     # processes must be > 1
     if processes < 2:
-        raise HTTPException(400,
-            "MPI requires at least 2 processes")
+        raise HTTPException(400, "MPI requires at least 2 processes")
 
     # ptile must divide processes evenly
     if processes % ptile != 0:
@@ -380,19 +378,27 @@ def validate_mpi_params(
             f"by processes per node ({ptile}). "
             f"Try: {ptile * (processes // ptile)} or {ptile * (processes // ptile + 1)}")
 
-    # ptile cannot exceed physical node capacity
-    if ptile > 16:
-        raise HTTPException(400,
-            f"Processes per node ({ptile}) cannot exceed "
-            f"node capacity (16 cores)")
+    # Get actual node capacity from cluster
+    state = await get_cluster_state()
+    # Find the minimum max_cores among available (usable) nodes
+    usable_nodes = [n for n in state["nodes"] if n["available"] and n["max_cores"] > 0]
+    if not usable_nodes:
+        # Fallback: use policy max_cores_per_job as conservative estimate
+        max_cores_per_node = max_cores
+    else:
+        max_cores_per_node = min(n["max_cores"] for n in usable_nodes)
 
-    # total processes cannot exceed policy
+    # Check ptile against actual node capacity
+    if ptile > max_cores_per_node:
+        raise HTTPException(400,
+            f"Processes per node ({ptile}) cannot exceed node capacity ({max_cores_per_node} cores). "
+            f"Available nodes have at most {max_cores_per_node} cores.")
+
+    # total processes cannot exceed policy limit (role-based)
     if processes > max_cores:
         raise HTTPException(400,
-            f"Total processes ({processes}) exceeds "
-            f"policy limit ({max_cores} cores) for {role} role")
+            f"Total processes ({processes}) exceeds policy limit ({max_cores} cores) for {role} role")
 
     # minimum ptile = 1
     if ptile < 1:
-        raise HTTPException(400,
-            "Processes per node must be at least 1")
+        raise HTTPException(400, "Processes per node must be at least 1")
