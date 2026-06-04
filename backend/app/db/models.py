@@ -209,8 +209,8 @@ class Session(Base):
     expires_at    : Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revoked_at    : Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     revoke_reason : Mapped[str]      = mapped_column(REVOKE_REASON_TYPE, nullable=True)
-    risk_score    : Mapped[int] = mapped_column(Integer, default=0)
-    peak_risk     : Mapped[int] = mapped_column(Integer, default=0)
+    risk_score:     Mapped[float]    = mapped_column(Float, default=0.0)
+    peak_risk:      Mapped[float]    = mapped_column(Float, default=0.0)
     totp_verified_at : Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
 
     user = relationship("User", back_populates="sessions")
@@ -260,3 +260,33 @@ class UserKnownIP(Base):
     last_seen  : Mapped[datetime] = mapped_column(
                      DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     verified   : Mapped[bool]     = mapped_column(Boolean, default=False)    
+    
+    
+    
+    
+
+
+class UserKnownDevice(Base):
+    __tablename__ = "user_known_devices"
+
+    id          : Mapped[str]      = mapped_column(
+                      UUID(as_uuid=False), primary_key=True,
+                      server_default=text("gen_random_uuid()"))
+    user_id     : Mapped[str]      = mapped_column(
+                      UUID(as_uuid=False),
+                      ForeignKey("users.user_id", ondelete="CASCADE"),
+                      nullable=False)
+    fingerprint : Mapped[str]      = mapped_column(String(64), nullable=False)
+    device_type : Mapped[str]      = mapped_column(String(20), nullable=True)
+    platform    : Mapped[str]      = mapped_column(String(50), nullable=True)
+    timezone    : Mapped[str]      = mapped_column(String(50), nullable=True)
+    verified    : Mapped[bool]     = mapped_column(Boolean, default=False)
+    first_seen  : Mapped[datetime] = mapped_column(
+                      DateTime(timezone=True),
+                      default=lambda: datetime.now(timezone.utc))
+    last_seen   : Mapped[datetime] = mapped_column(
+                      DateTime(timezone=True),
+                      default=lambda: datetime.now(timezone.utc),
+                      onupdate=lambda: datetime.now(timezone.utc))
+    
+    

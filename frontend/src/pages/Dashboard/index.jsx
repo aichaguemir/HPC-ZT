@@ -26,7 +26,7 @@ export default function Dashboard() {
       const token = getToken();
 
       // Fetch all jobs
-      const jobsRes = await axios.get("https://localhost:8000/api/v1/jobs/", {
+      const jobsRes = await axios.get("https://localhost/api/v1/jobs/", {
         headers: { Authorization: `Bearer ${token}` }
       });
 
@@ -34,7 +34,7 @@ export default function Dashboard() {
 
       // Fetch status per job
       const statusPromises = jobsList.map(job => 
-        axios.get(`https://localhost:8000/api/v1/jobs/${job.job_id}/status`, {
+        axios.get(`https://localhost/api/v1/jobs/${job.job_id}/status`, {
           headers: { Authorization: `Bearer ${token}` }
         }).catch(() => ({ data: { status: 'UNKNOWN' } })) 
       );

@@ -22,7 +22,7 @@ export default function JobQueue() {
       setError("");
       const token = getToken();
      
-      const res = await axios.get("https://localhost:8000/api/v1/jobs/", {
+      const res = await axios.get("https://localhost/api/v1/jobs/", {
         headers: { Authorization: `Bearer ${token}` }
       });
 
@@ -48,7 +48,7 @@ export default function JobQueue() {
     try {
       const token = getToken();
     
-      const res = await axios.get(`https://localhost:8000/api/v1/jobs/${jobId}/status`, {
+      const res = await axios.get(`https://localhost/api/v1/jobs/${jobId}/status`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setJobs(prevJobs =>
@@ -75,7 +75,7 @@ export default function JobQueue() {
       setSelectedJobId(jobId);
       const token = getToken();
       
-      const res = await axios.get(`https://localhost:8000/api/v1/jobs/${jobId}/output`, {
+      const res = await axios.get(`https://localhost/api/v1/jobs/${jobId}/output`, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
@@ -90,7 +90,7 @@ export default function JobQueue() {
     try {
       const token = getToken();
    
-      const res = await axios.get(`https://localhost:8000/api/v1/jobs/${jobId}/error`, {
+      const res = await axios.get(`https://localhost/api/v1/jobs/${jobId}/error`, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
@@ -106,7 +106,7 @@ export default function JobQueue() {
     try {
       const token = getToken();
      
-      await axios.delete(`https://localhost:8000/api/v1/jobs/${id}/cancel`, {
+      await axios.delete(`https://localhost/api/v1/jobs/${id}/cancel`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       alert("Cancellation request sent.");

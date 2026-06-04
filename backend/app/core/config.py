@@ -12,6 +12,8 @@ SSH_PASSWORD   = os.getenv("SSH_PASSWORD")
 LSF_PATH       = os.getenv("LSF_PATH")
 REMOTE_JOB_DIR = os.getenv("REMOTE_JOB_DIR")
 
+SMTP_USER: str = os.getenv("SMTP_USER", "")
+SMTP_PASS: str = os.getenv("SMTP_PASS", "")
 # ==============================
 # DATABASE
 # ==============================
@@ -37,9 +39,9 @@ KEYCLOAK_CLIENT_SECRET = os.getenv("KEYCLOAK_CLIENT_SECRET", "")
 
 
 
-SMTP_HOST: str = "hpc-mailhog"
-SMTP_PORT: int = 1025
-SMTP_FROM: str = "noreply@hpc-gateway.local"
+SMTP_HOST: str = os.getenv("SMTP_HOST", "mail.univ-sba.dz")
+SMTP_PORT: int = int(os.getenv("SMTP_PORT", "587"))
+SMTP_FROM: str = os.getenv("SMTP_FROM", "hpc-portal@univ-sba.dz")
 # ==============================
 # JOB LIMITS (fallback — real limits come from policies table)
 # ==============================

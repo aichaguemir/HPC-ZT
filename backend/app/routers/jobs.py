@@ -140,13 +140,12 @@ async def submit_job(
             raise HTTPException(400, "MPI jobs require researcher or admin role")
         if not mpi_processes or not mpi_ptile:
             raise HTTPException(400, "MPI jobs require mpi_processes and mpi_ptile")
-        validate_mpi_params(
+        await validate_mpi_params(
             processes = mpi_processes,
             ptile     = mpi_ptile,
             role      = current_user.role,
             max_cores = policy.max_cores_per_job,
         )
-
     # ⑩ Insert pending job
     unique_id   = str(uuid.uuid4())
     pending_job = Job(
@@ -393,6 +392,7 @@ async def get_job_status(
 @router.get("/{job_id}/output", response_model=JobOutputResponse)
 async def get_job_output(
     job_id:       str,
+    request:      Request,                     # ← added
     db:           AsyncSession = Depends(get_db),
     current_user: User         = Depends(get_current_user),
 ):
@@ -408,7 +408,7 @@ async def get_job_output(
     user_result = await db.execute(
         select(User).where(User.user_id == job.user_id)
     )
-    job_user    = user_result.scalar_one_or_none()
+    job_user = user_result.scalar_one_or_none()
     job_workdir = f"{REMOTE_JOB_DIR}/{job_user.username}/job_{job.unique_id}"
 
     # Both serial and MPI jobs write to a single output file
@@ -430,22 +430,25 @@ async def get_job_output(
     if marker in output:
         output = output.split(marker, 1)[1].strip()
 
-    log = AuditLog(
-        user_id = current_user.user_id,
-        job_id  = job_id,
-        action  = "view_output"
+    # ─── Use write_audit_entry instead of direct insert ───
+    await write_audit_entry(
+        db         = db,
+        action     = "view_output",
+        result     = "success",
+        user_id    = current_user.user_id,
+        job_id     = job_id,
+        ip_address = request.client.host if request.client else None,
+        detail     = {"output_length": len(output)},
     )
-    db.add(log)
-    await db.commit()
 
     return JobOutputResponse(job_id=job_id, output=output)
 # ══════════════════════════════════════════════════════════════════════════
 # ERROR LOG
 # ══════════════════════════════════════════════════════════════════════════
-
 @router.get("/{job_id}/error", response_model=JobErrorResponse)
 async def get_job_error(
     job_id:       str,
+    request:      Request,                     # ← added
     db:           AsyncSession = Depends(get_db),
     current_user: User         = Depends(get_current_user),
 ):
@@ -480,11 +483,12 @@ async def get_job_error(
         result     = "success",
         user_id    = current_user.user_id,
         job_id     = job_id,
+        ip_address = request.client.host if request.client else None,  # ← added
+        detail     = {"error_length": len(error) if error else 0},
     )
-    await db.commit()
+    # No need for extra commit – write_audit_entry handles it
 
     return JobErrorResponse(job_id=job_id, error=error)
-
 
 # ══════════════════════════════════════════════════════════════════════════
 # CANCEL
