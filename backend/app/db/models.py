@@ -1,7 +1,8 @@
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
-from sqlalchemy import String, Integer, Boolean, DateTime, ForeignKey, text
+from sqlalchemy import String, Integer, Boolean, DateTime, ForeignKey, text, Float
 from sqlalchemy.dialects.postgresql import UUID, JSONB, ENUM as PG_ENUM
 from datetime import datetime,timezone
+
 import enum
 
 
@@ -96,7 +97,7 @@ class User(Base):
     sessions = relationship("Session",  back_populates="user",
                             cascade="all, delete-orphan")
     logs     = relationship("AuditLog", back_populates="user")
-
+    document_path: Mapped[str] = mapped_column(String, nullable=True)
 
 # ── Policy ─────────────────────────────────────────────────────────────────
 
@@ -290,3 +291,27 @@ class UserKnownDevice(Base):
                       onupdate=lambda: datetime.now(timezone.utc))
     
     
+ # ── Message ────────────────────────────────────────────────────────────────
+
+class Message(Base):
+    __tablename__ = "messages"
+
+    message_id  : Mapped[str]      = mapped_column(
+                      UUID(as_uuid=False), primary_key=True,
+                      server_default=text("gen_random_uuid()"))
+    sender_id   : Mapped[str]      = mapped_column(
+                      UUID(as_uuid=False),
+                      ForeignKey("users.user_id", ondelete="CASCADE"),
+                      nullable=False)
+    receiver_id : Mapped[str]      = mapped_column(
+                      UUID(as_uuid=False),
+                      ForeignKey("users.user_id", ondelete="CASCADE"),
+                      nullable=False)
+    content     : Mapped[str]      = mapped_column(String, nullable=False)
+    is_read     : Mapped[bool]     = mapped_column(Boolean, default=False, nullable=False)
+    created_at  : Mapped[datetime] = mapped_column(
+                      DateTime(timezone=True),
+                      default=lambda: datetime.now(timezone.utc))
+
+    sender   = relationship("User", foreign_keys=[sender_id])
+    receiver = relationship("User", foreign_keys=[receiver_id])

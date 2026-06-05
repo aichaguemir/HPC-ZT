@@ -77,6 +77,7 @@ async def list_pending(
                 "email":          u.email,
                 "requested_role": u.requested_role,
                 "created_at":     str(u.created_at),
+                "document_url":   f"/uploads/{u.document_path}" if u.document_path else None, 
             }
             for u in users
         ]
@@ -104,6 +105,7 @@ async def approve_user(
 
     user.is_approved = True
     user.role        = role_to_assign
+    user.email_otp_verified = False 
 
     await write_audit_entry(
         db         = db,

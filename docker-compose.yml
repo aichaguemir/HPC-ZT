@@ -9,11 +9,11 @@ services:
     environment:
       POSTGRES_USER: hpcuser
       POSTGRES_PASSWORD: ***REMOVED***
-      POSTGRES_DB: hpc_gateway
+      POSTGRES_DB: hpc_portal
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U hpcuser -d hpc_gateway"]
+      test: ["CMD-SHELL", "pg_isready -U hpcuser -d hpc_portal"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -38,7 +38,7 @@ services:
       - ./backend/.env
     environment:
       KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://hpc-postgres:5432/hpc_gateway
+      KC_DB_URL: jdbc:postgresql://hpc-postgres:5432/hpc_portal
       KC_DB_USERNAME: hpcuser
       KC_DB_PASSWORD: ***REMOVED***
       KEYCLOAK_ADMIN: admin
@@ -51,7 +51,7 @@ services:
     volumes:
       - ./certs/server.crt:/opt/keycloak/conf/server.crt:ro
       - ./certs/server.key:/opt/keycloak/conf/server.key:ro
-    command: start-dev
+    command: start-dev --https-port=8443
     ports:
       - "8443:8443"
     healthcheck:
@@ -81,22 +81,12 @@ services:
     volumes:
       - ./certs:/app/certs:ro 
       - audit-anchors:/app/audit_anchors
+      - ./uploads:/app/uploads:rw
     command: >
-      sh -c "pip install uvicorn fastapi && python -m uvicorn main:app --host 0.0.0.0 --port 8000 --ssl-keyfile /app/certs/fastapi.key --ssl-certfile /app/certs/fastapi.crt --ssl-ca-certs /app/certs/ca.crt --ssl-cert-reqs 2"
+      sh -c "pip install uvicorn fastapi && python -m uvicorn main:app --host 0.0.0.0 --port 8000 --ssl-keyfile /app/certs/fastapi.key --ssl-certfile /app/certs/fastapi.crt"
     expose:
       - "8000"
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "python",
-          "-c",
-          "import urllib.request,ssl; ctx=ssl.create_default_context(); ctx.load_cert_chain('/app/certs/client.crt','/app/certs/client.key'); ctx.check_hostname=False;            ctx.verify_mode=ssl.CERT_NONE; urllib.request.urlopen('https://localhost:8000/health',context=ctx)"
-        ]
-      interval: 15s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
+    
     depends_on:
       postgres:
         condition: service_healthy
@@ -112,8 +102,7 @@ services:
     expose:
       - "3000"
     depends_on:
-      fastapi:
-        condition: service_healthy
+     
       keycloak:
         condition: service_healthy
     networks:
@@ -130,8 +119,7 @@ services:
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
       - ./certs:/etc/nginx/certs:ro
     depends_on:
-      fastapi:
-        condition: service_healthy
+     
       keycloak:
         condition: service_healthy
       frontend:

@@ -3,44 +3,29 @@ const KEYCLOAK_REALM  = "HPC-Project";
 const KEYCLOAK_CLIENT = "hpc-backend";
 const API_URL         = "https://localhost/api/v1";
 
-// ── Token storage ──────────────────────────────────────────────────────────
-
-export const saveToken = (token) => {
-  sessionStorage.setItem("access_token", token);
-};
-
-export const getToken = () => {
-  return sessionStorage.getItem("access_token");
-};
-
-export const saveRefreshToken = (token) => {
-  sessionStorage.setItem("refresh_token", token);
-};
-
-export const getRefreshToken = () => {
-  return sessionStorage.getItem("refresh_token");
-};
+export const saveToken = (token) => sessionStorage.setItem("access_token", token);
+export const getToken = () => sessionStorage.getItem("access_token");
+export const saveRefreshToken = (token) => sessionStorage.setItem("refresh_token", token);
+export const getRefreshToken = () => sessionStorage.getItem("refresh_token");
 
 export const removeToken = () => {
   sessionStorage.removeItem("access_token");
-  sessionStorage.removeItem("refresh_token"); 
+  sessionStorage.removeItem("refresh_token");
   sessionStorage.removeItem("user");
+  sessionStorage.removeItem("mfa_verified");
+  localStorage.removeItem("mfa_verified");
 };
 
-export const saveUser = (user) => {
-  sessionStorage.setItem("user", JSON.stringify(user));
-};
-
+export const saveUser = (user) => sessionStorage.setItem("user", JSON.stringify(user));
 export const getUser = () => {
   const user = sessionStorage.getItem("user");
   return user ? JSON.parse(user) : null;
 };
+export const isAuthenticated = () => !!getToken();
+export const completeMfa = () => sessionStorage.setItem("mfa_verified", "true");
+export const isMfaVerified = () => sessionStorage.getItem("mfa_verified") === "true";
 
-export const isAuthenticated = () => {
-  return !!getToken();
-};
-
-// ── Login via Keycloak direct grant ───────────────────────────────────────
+// ── Login ──────────────────────────────────────────────────────────────────
 
 export const login = async (username, password) => {
   const params = new URLSearchParams();
@@ -65,8 +50,8 @@ export const login = async (username, password) => {
 
   const data = await response.json();
   saveToken(data.access_token);
-  
   if (data.refresh_token) saveRefreshToken(data.refresh_token);
+  sessionStorage.removeItem("mfa_verified");
 
   const meResponse = await fetch(`${API_URL}/auth/me`, {
     headers: { "Authorization": `Bearer ${data.access_token}` }
@@ -84,10 +69,15 @@ export const login = async (username, password) => {
 
   const user = await meResponse.json();
   saveUser(user);
-  return user;
-};
 
-// ── Silent Refresh Logic ──────────────────────────────────────────────────
+  if (!user.email_otp_verified) {
+    throw new Error("MFA_REQUIRED");
+  } else {
+    completeMfa();
+    return user;
+  }
+};
+// ── Refresh Token ──────────────────────────────────────────────────────────
 
 export const refreshToken = async () => {
   const refresh = getRefreshToken();
@@ -113,7 +103,6 @@ export const refreshToken = async () => {
     const data = await response.json();
     saveToken(data.access_token);
     if (data.refresh_token) saveRefreshToken(data.refresh_token);
-    
     return true;
   } catch (err) {
     console.error("Refresh Token Error:", err);
@@ -121,7 +110,7 @@ export const refreshToken = async () => {
   }
 };
 
-// ── USERS & LOGS ───────────────────────────────────
+// ── USERS & LOGS ───────────────────────────────────────────────────────────
 
 export const getAllUsers = async () => {
   const token = getToken();
@@ -141,7 +130,7 @@ export const getSystemLogs = async () => {
   return await response.json();
 };
 
-// ── Register via your FastAPI backend ─────────────────────────────────────
+// ── Register ───────────────────────────────────────────────────────────────
 
 export const register = async (formData) => {
   const response = await fetch(`${API_URL}/auth/register`, {
@@ -158,11 +147,7 @@ export const register = async (formData) => {
   });
 
   const data = await response.json();
-
-  if (!response.ok) {
-    throw new Error(data.detail || "Registration failed");
-  }
-
+  if (!response.ok) throw new Error(data.detail || "Registration failed");
   return data;
 };
 

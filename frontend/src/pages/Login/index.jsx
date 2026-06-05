@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-
-import { login } from "../../store/auth"; 
+import { login } from "../../store/auth";
 
 export default function Login() {
   const [username, setUsername] = useState("");
@@ -15,24 +14,13 @@ export default function Login() {
     e.preventDefault();
     setLoading(true);
     setError("");
-
     try {
-     
-      const user = await login(username, password);
-
-      
-      if (user.role === "admin") {
-        navigate("/");
-      } else {
-        navigate("/");
-      }
-
-     
-      window.location.reload();
-
+      await login(username, password);
+      window.location.href = "/dashboard";
     } catch (err) {
-     
-      if (err.message === "PENDING_APPROVAL") {
+      if (err.message === "MFA_REQUIRED") {
+        navigate("/mfa");
+      } else if (err.message === "PENDING_APPROVAL") {
         navigate("/pending-approval");
       } else {
         setError(err.message || "Invalid username or password");
@@ -46,13 +34,14 @@ export default function Login() {
     <div className="auth-container">
       <div className="auth-card">
         <h2>Login</h2>
-        
         {error && (
-  <p className="error-message" style={{ textAlign: 'center', marginBottom: '15px', color: '#dc2626' }}>
-    {error}
-  </p>
-)}
-        
+          <p
+            className="error-message"
+            style={{ textAlign: "center", marginBottom: "15px", color: "#dc2626" }}
+          >
+            {error}
+          </p>
+        )}
         <form onSubmit={handleSubmit}>
           <label>Username</label>
           <input
@@ -63,7 +52,6 @@ export default function Login() {
             required
             placeholder="Enter your username"
           />
-
           <label>Password</label>
           <div className="password-field" style={{ marginBottom: "20px" }}>
             <input
@@ -78,24 +66,42 @@ export default function Login() {
               onClick={() => setShowPassword(!showPassword)}
             >
               {showPassword ? (
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="20" height="20">
-                  <path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-5 0-9.27-3.11-11-8a11.07 11.07 0 0 1 4.15-5.82"/>
-                  <line x1="1" y1="1" x2="23" y2="23"/>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="#2563eb"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  width="20"
+                  height="20"
+                >
+                  <path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-5 0-9.27-3.11-11-8a11.07 11.07 0 0 1 4.15-5.82" />
+                  <line x1="1" y1="1" x2="23" y2="23" />
                 </svg>
               ) : (
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="20" height="20">
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                  <circle cx="12" cy="12" r="3"/>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="#2563eb"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  width="20"
+                  height="20"
+                >
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                  <circle cx="12" cy="12" r="3" />
                 </svg>
               )}
             </span>
           </div>
-
           <button type="submit" disabled={loading}>
             {loading ? "Verifying..." : "Login"}
           </button>
         </form>
-
         <p style={{ marginTop: "15px" }}>
           Don't have an account? <Link to="/register">Register</Link>
         </p>

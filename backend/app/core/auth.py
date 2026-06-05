@@ -15,27 +15,22 @@ from app.db.models import User, AuditLog
 from app.core.logging import logger
 from app.core.carta import get_or_create_session, register_ip
 
-# FIX: import write_audit_entry so register + role_change go through
-# the HMAC chain instead of raw AuditLog() inserts.
-# Raw inserts bypass compute_hash() → chain_hash stays NULL → those
-# events are invisible to verify_chain() and Rekor anchors.
 from app.core.audit_chain import write_audit_entry
 
 
-# ── OAuth2 scheme ──────────────────────────────────────────────────────────
 oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl=f"{KEYCLOAK_URL}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/token"
 )
 
-# ── Public key cache ───────────────────────────────────────────────────────
 _jwks_cache: Optional[dict] = None
 
-# ── Paths allowed before MFA is verified ──────────────────────────────────
 MFA_SETUP_ALLOWED_PATHS = {
     "/auth/mfa/send-code",
     "/auth/mfa/verify-code",
     "/auth/me",
     "/auth/logout",
+    "/messages/send",          
+    "/messages/my-conversation",
 }
 
 
@@ -66,8 +61,6 @@ def extract_role(payload: dict) -> str:
     return "student"
 
 
-# ── Main dependency ────────────────────────────────────────────────────────
-
 async def get_current_user(
     request: Request,
     token: str = Depends(oauth2_scheme),
@@ -82,7 +75,7 @@ async def get_current_user(
 
     # Step 1 — verify JWT
     try:
-        jwks    = await get_keycloak_public_keys()
+        jwks = await get_keycloak_public_keys()
         payload = jwt.decode(
             token, jwks, algorithms=["RS256"],
             options={"verify_aud": False},
@@ -96,8 +89,8 @@ async def get_current_user(
         raise credentials_exception
 
     # Step 2 — extract info
-    username  = payload.get("preferred_username", keycloak_id)
-    email     = payload.get("email", f"{username}@unknown.com")
+    username = payload.get("preferred_username", keycloak_id)
+    email = payload.get("email", f"{username}@unknown.com")
     user_role = extract_role(payload)
 
     # Step 3 — look up or create user
@@ -108,26 +101,23 @@ async def get_current_user(
 
     if user is None:
         user = User(
-            keycloak_id    = keycloak_id,
-            username       = username,
-            email          = email,
-            role           = user_role,
-            requested_role = user_role,
-            is_approved    = False,
-            is_active      = True,
+            keycloak_id=keycloak_id,
+            username=username,
+            email=email,
+            role=user_role,
+            requested_role=user_role,
+            is_approved=False,
+            is_active=True,
         )
         db.add(user)
         await db.flush()
 
-        # FIX: was raw AuditLog() insert — chain_hash was NULL, event was
-        # invisible to verify_chain() and never anchored to Rekor.
-        # Now goes through write_audit_entry() → HMAC chain → Rekor anchor.
         await write_audit_entry(
-            db      = db,
-            action  = "register",
-            result  = "success",
-            user_id = str(user.user_id),
-            detail  = {"username": username, "source": "keycloak"},
+            db=db,
+            action="register",
+            result="success",
+            user_id=str(user.user_id),
+            detail={"username": username, "source": "keycloak"},
         )
 
         await db.commit()
@@ -136,20 +126,18 @@ async def get_current_user(
 
     else:
         if user.role != user_role:
-            old_role  = user.role
+            old_role = user.role
             user.role = user_role
 
-            # FIX: same — raw insert replaced with write_audit_entry()
-            # so role changes are part of the tamper-evident chain.
             await write_audit_entry(
-                db      = db,
-                action  = "role_change",
-                result  = "success",
-                user_id = str(user.user_id),
-                detail  = {
+                db=db,
+                action="role_change",
+                result="success",
+                user_id=str(user.user_id),
+                detail={
                     "old_role": old_role,
                     "new_role": user_role,
-                    "source":   "keycloak_sync",
+                    "source": "keycloak_sync",
                 },
             )
 
@@ -164,32 +152,63 @@ async def get_current_user(
             "Account pending admin approval. "
             "Please wait for an administrator to approve your registration.")
 
-    # ── Step 5 — Email OTP gate ───────────────────────────────────────────
-    if user.role != "admin" and not user.email_otp_verified:
-        path    = request.url.path.rstrip("/")
-        allowed = any(path.endswith(p) for p in MFA_SETUP_ALLOWED_PATHS)
-        if not allowed:
-            raise HTTPException(
-                status_code=403,
-                detail={
-                    "code":        "mfa_required",
-                    "message":     (
-                        "You must verify your identity before continuing. "
-                        "POST to /auth/mfa/send-code to receive a code by email, "
-                        "then verify it at /auth/mfa/verify-code."
-                    ),
-                    "send_url":   "/auth/mfa/send-code",
-                    "verify_url": "/auth/mfa/verify-code",
-                }
-            )
+    # Step 5 — Email OTP gate
+    if user.role != "admin":
+        if not user.email_otp_verified:
+            # تحقق من أن المستخدم لديه جلسة MFA نشطة
+            from app.core.carta import get_or_create_session
+            session = await get_or_create_session(user, token, request, db)
+            
+            if session.totp_verified_at:
+                # تم التحقق من MFA في هذه الجلسة
+                pass
+            else:
+                path = request.url.path.rstrip("/")
+                allowed = any(path.endswith(p) for p in MFA_SETUP_ALLOWED_PATHS)
+                if not allowed:
+                    raise HTTPException(
+                        status_code=403,
+                        detail={
+                            "code": "mfa_required",
+                            "message": (
+                                "You must verify your identity before continuing. "
+                                "POST to /auth/mfa/send-code to receive a code by email, "
+                                "then verify it at /auth/mfa/verify-code."
+                            ),
+                            "send_url": "/auth/mfa/send-code",
+                            "verify_url": "/auth/mfa/verify-code",
+                        }
+                    )
+        else:
+            # إذا كان email_otp_verified = True، تحقق من الجلسة
+            from app.core.carta import get_or_create_session
+            session = await get_or_create_session(user, token, request, db)
+            
+            if not session.totp_verified_at:
+                path = request.url.path.rstrip("/")
+                allowed = any(path.endswith(p) for p in MFA_SETUP_ALLOWED_PATHS)
+                if not allowed:
+                    raise HTTPException(
+                        status_code=403,
+                        detail={
+                            "code": "mfa_required",
+                            "message": (
+                                "You must verify your identity before continuing. "
+                                "POST to /auth/mfa/send-code to receive a code by email, "
+                                "then verify it at /auth/mfa/verify-code."
+                            ),
+                            "send_url": "/auth/mfa/send-code",
+                            "verify_url": "/auth/mfa/verify-code",
+                        }
+                    )
 
     # Step 6 — Register IP on every authenticated request
     if request and request.client:
         await register_ip(
-            user_id  = user.user_id,
-            ip       = request.client.host,
-            db       = db,
-            verified = False,
+            user_id=user.user_id,
+            ip=request.client.host,
+            db=db,
+            verified=False,
         )
 
     return user
@@ -204,11 +223,26 @@ async def get_current_user_and_token(
     return user, token
 
 
-# ── Admin-only dependency ──────────────────────────────────────────────────
-
 async def require_admin(
     current_user: User = Depends(get_current_user)
 ) -> User:
     if current_user.role != "admin":
         raise HTTPException(403, "Admin access required")
     return current_user
+    
+    
+async def get_current_user_basic(
+    token: str = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    """Like get_current_user but allows unapproved users — for messaging only."""
+    payload = await decode_token(token)
+    user_id = payload.get("sub") or payload.get("user_id")
+    
+    result = await db.execute(select(User).where(User.keycloak_id == user_id))
+    user = result.scalar_one_or_none()
+    
+    if user is None or not user.is_active:
+        raise HTTPException(401, "User not found or inactive")
+    
+    return user

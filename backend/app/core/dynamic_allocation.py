@@ -1,4 +1,4 @@
-from app.core.dynamic_allocation import get_cluster_state
+
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 

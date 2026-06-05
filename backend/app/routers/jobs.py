@@ -40,7 +40,18 @@ async def get_policy(user: User, db: AsyncSession) -> Policy:
         raise HTTPException(503, "Policy not configured for your role. Contact admin.")
     return policy
 
-
+@router.get("/my-policy")
+async def get_my_policy(
+    db:           AsyncSession = Depends(get_db),
+    current_user: User         = Depends(get_current_user),
+):
+    policy = await get_policy(current_user, db)
+    return {
+        "max_cores":      policy.max_cores_per_job,
+        "max_memory_mb":  policy.max_memory_mb,
+        "max_wall_time":  policy.max_wall_time_hours,
+        "allowed_queues": [{"queue_name": q.queue_name} for q in policy.allowed_queues],
+    }
 # ══════════════════════════════════════════════════════════════════════════
 # SUBMIT
 # ══════════════════════════════════════════════════════════════════════════
@@ -563,9 +574,7 @@ async def list_jobs(
 # ══════════════════════════════════════════════════════════════════════════
 
 @router.get("/cluster/state")
-async def cluster_state(
-    current_user: User = Depends(get_current_user),
-):
+async def cluster_state():
     """Returns current cluster utilization and node status."""
     state = await get_cluster_state()
     return {
@@ -602,3 +611,27 @@ async def allocation_options(
         job_type         = job_type,
         mpi_ptile        = mpi_ptile,
     )
+    
+    
+    
+    
+@router.get("/cluster/public-state")
+async def cluster_public_state():
+    """Public endpoint - no auth required."""
+    try:
+        state = await get_cluster_state()
+        return {
+            "utilization":  f"{state['utilization']*100:.0f}%",
+            "total_cores":  state["total_cores"],
+            "free_cores":   state["free_cores"],
+            "active_nodes": state["active_nodes"],
+            "total_nodes":  state["total_nodes"],
+        }
+    except Exception:
+        return {
+            "utilization":  "—",
+            "total_cores":  352,
+            "free_cores":   "—",
+            "active_nodes": 22,
+            "total_nodes":  30,
+        }

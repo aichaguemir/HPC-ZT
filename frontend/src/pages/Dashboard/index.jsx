@@ -1,13 +1,18 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { getToken, getUser, isAuthenticated } from "../../store/auth";
+import api from "../../store/api"; // استخدام الـ instance المضبط
 
 export default function Dashboard() {
   const [stats, setStats] = useState({ totalJobs: 0, running: 0, completed: 0, failed: 0 });
   const [recentJobs, setRecentJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+
+  // دالة مساعدة للحصول على التوكن
+  const getAuthHeader = () => ({
+    headers: { Authorization: `Bearer ${getToken()}` }
+  });
 
   // Helper function to map status string to CSS class
   const mapStatus = (status) => {
@@ -23,20 +28,16 @@ export default function Dashboard() {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      const token = getToken();
 
-      // Fetch all jobs
-      const jobsRes = await axios.get("https://localhost/api/v1/jobs/", {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      // Fetch all jobs باستخدام api بدلاً من axios
+      const jobsRes = await api.get("/jobs/", getAuthHeader());
 
       const jobsList = jobsRes.data.jobs || (Array.isArray(jobsRes.data) ? jobsRes.data : []);
 
       // Fetch status per job
       const statusPromises = jobsList.map(job => 
-        axios.get(`https://localhost/api/v1/jobs/${job.job_id}/status`, {
-          headers: { Authorization: `Bearer ${token}` }
-        }).catch(() => ({ data: { status: 'UNKNOWN' } })) 
+        api.get(`/jobs/${job.job_id}/status`, getAuthHeader())
+           .catch(() => ({ data: { status: 'UNKNOWN' } })) 
       );
 
       const statuses = await Promise.all(statusPromises);

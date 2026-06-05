@@ -63,3 +63,4 @@ Pygments==2.17.2
 six==1.16.0
 blinker==1.7.0
 
+aiosmtplib==2.0.0

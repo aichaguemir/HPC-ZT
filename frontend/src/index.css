@@ -1643,3 +1643,24 @@ form.job-form button:hover {
 .stat-card.warning .metric-big { color: #d97706; }
 .stat-card.success .metric-big { color: #16a34a; }
 .stat-card.danger .metric-big { color: #dc2626; }
+
+.btn-download-pro {
+  padding: 7px 14px;
+  border-radius: 8px;
+  border: 1px solid #bbf7d0;
+  background: #f0fdf4;
+  color: #16a34a;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-download-pro:hover {
+  background: #16a34a;
+  color: white;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}

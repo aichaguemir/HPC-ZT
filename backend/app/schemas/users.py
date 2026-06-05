@@ -15,6 +15,8 @@ class UserResponse(BaseModel):
     email      : str
     role       : str
     is_active  : bool
+    is_approved        : bool
+    email_otp_verified : bool
     created_at : datetime
 
     class Config:

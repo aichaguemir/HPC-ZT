@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
-import api from "../../store/api"; 
-
+import api from "../../store/api";
 
 export default function AuditLog() {
   const [logs, setLogs] = useState([]);
@@ -9,26 +8,19 @@ export default function AuditLog() {
   const [verifying, setVerifying] = useState(false);
   const [verificationResult, setVerificationResult] = useState(null);
 
+  const fetchLogs = async (isInitial = false) => {
+    if (isInitial) setLoading(true);
+    try {
+      const response = await api.get("/admin/audit/logs");
+      const data = response.data;
+      setLogs(data.logs || (Array.isArray(data) ? data : []));
+    } catch (err) {
+      console.error("Audit Fetch Error:", err);
+    } finally {
+      if (isInitial) setLoading(false);
+    }
+  };
 
- const fetchLogs = async (isInitial = false) => {
-  if (isInitial) setLoading(true);
-  try {
-    // جربي هاد الرابط أولاً
-    const response = await api.get("/admin/audit/logs"); 
-    
-    console.log("Audit Data:", response.data); // شوفي الـ Console إذا جات البيانات
-    
-    // التعامل مع شكل البيانات (Object أو Array)
-    const data = response.data;
-    setLogs(data.logs || (Array.isArray(data) ? data : []));
-    
-  } catch (err) {
-    console.error("Audit Fetch Error:", err);
-  } finally {
-    if (isInitial) setLoading(false);
-  }
-};
- 
   const handleVerifyChain = async () => {
     setVerifying(true);
     setVerificationResult(null);
@@ -54,18 +46,12 @@ export default function AuditLog() {
   };
 
   useEffect(() => {
-  
     fetchLogs(true);
-
-
-    const interval = setInterval(() => {
-      fetchLogs(false);
-    }, 30000);
-
+    const interval = setInterval(() => fetchLogs(false), 30000);
     return () => clearInterval(interval);
   }, []);
 
-  const filtered = Array.isArray(logs) ? logs.filter(log => 
+  const filtered = Array.isArray(logs) ? logs.filter(log =>
     log.action?.toLowerCase().includes(search.toLowerCase()) ||
     log.username?.toLowerCase().includes(search.toLowerCase()) ||
     log.user_id?.toLowerCase().includes(search.toLowerCase()) ||
@@ -104,7 +90,7 @@ export default function AuditLog() {
           <thead>
             <tr>
               <th>Timestamp</th>
-              <th>Username</th> 
+              <th>Username</th>
               <th>Action</th>
               <th>IP Address</th>
               <th>Result</th>
@@ -118,14 +104,19 @@ export default function AuditLog() {
                     {log.timestamp ? new Date(log.timestamp).toLocaleString() : "N/A"}
                   </td>
                   <td>
-                    <button className="user-link" onClick={() => handleUserIps(log.user_id, log.username)}>
+                    <button
+                      className="user-link"
+                      onClick={() => handleUserIps(log.user_id, log.username)}
+                    >
                       {log.username || "System"}
                     </button>
                   </td>
                   <td>
                     <span className="tag tag-action">{log.action}</span>
                   </td>
-                  <td className="ip-text"><code>{log.ip_address || "N/A"}</code></td>
+                  <td className="ip-text">
+                    <code>{log.ip_address || "N/A"}</code>
+                  </td>
                   <td>
                     <span className={`tag ${log.result?.toLowerCase() === "success" ? "tag-success" : "tag-error"}`}>
                       {log.result?.toUpperCase()}
