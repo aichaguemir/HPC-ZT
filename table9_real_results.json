@@ -1,0 +1,65 @@
+[
+  {
+    "scenario": "Baseline (no attack)",
+    "local_chain": "pass",
+    "local_anchors": "pass",
+    "rekor": "pass",
+    "note": "overall valid=True; 28 anchors, 28 Rekor refs, 280 entries"
+  },
+  {
+    "scenario": "SQL field modification",
+    "local_chain": "alarm",
+    "local_anchors": "n/r",
+    "rekor": "n/r",
+    "note": "chain: hash_mismatch \u2014 entry was modified at log_id 138"
+  },
+  {
+    "scenario": "Key theft + rewrite 20 entries, refs file untouched",
+    "local_chain": "pass",
+    "local_anchors": "pass",
+    "rekor": "mismatch (vs DB)",
+    "note": "overall valid=False | attacker rewrote DB chain + local anchors"
+  },
+  {
+    "scenario": "Key theft + rewrite 20 entries, refs file ALSO rewritten",
+    "local_chain": "pass",
+    "local_anchors": "pass",
+    "rekor": "mismatch",
+    "note": "overall valid=False | attacker also edited rekor_refs.jsonl"
+  },
+  {
+    "scenario": "Rekor unreachable at verification",
+    "local_chain": "pass",
+    "local_anchors": "pass",
+    "rekor": "fail (network error)",
+    "note": ""
+  },
+  {
+    "scenario": "Legacy-mode rewrite AFTER last anchor, no K",
+    "local_chain": "pass (mixed)",
+    "local_anchors": "pass",
+    "rekor": "pass",
+    "note": "overall valid=True | chain_mode=mixed, tamper_resistant=False"
+  },
+  {
+    "scenario": "[extra] Legacy-mode rewrite of entries 261-280 (inside anchored region), no K",
+    "local_chain": "pass (mixed)",
+    "local_anchors": "alarm",
+    "rekor": "mismatch (vs DB)",
+    "note": "anchors:chain_hash_mismatch"
+  },
+  {
+    "scenario": "[extra] Legacy-mode rewrite of WHOLE chain, no K",
+    "local_chain": "pass (mixed)",
+    "local_anchors": "alarm",
+    "rekor": "mismatch (vs DB)",
+    "note": "chain_mode=mixed"
+  },
+  {
+    "scenario": "[extra] Key theft, DB rewritten but anchors file not touched",
+    "local_chain": "pass",
+    "local_anchors": "alarm",
+    "rekor": "mismatch (vs DB)",
+    "note": ""
+  }
+]

@@ -1,0 +1,2230 @@
+{
+  "weight_verification": [
+    {
+      "signal": "R1_baseline",
+      "weight": 0.13,
+      "expected_rho": 0.13,
+      "computed_rho": 0.13,
+      "verified": true
+    },
+    {
+      "signal": "R2_device",
+      "weight": 0.1,
+      "expected_rho": 0.1,
+      "computed_rho": 0.1,
+      "verified": true
+    },
+    {
+      "signal": "R3_geo",
+      "weight": 0.18,
+      "expected_rho": 0.18,
+      "computed_rho": 0.18,
+      "verified": true
+    },
+    {
+      "signal": "R4_temporal",
+      "weight": 0.04,
+      "expected_rho": 0.04,
+      "computed_rho": 0.04,
+      "verified": true
+    },
+    {
+      "signal": "R5_rate",
+      "weight": 0.13,
+      "expected_rho": 0.13,
+      "computed_rho": 0.13,
+      "verified": true
+    },
+    {
+      "signal": "R6_cred",
+      "weight": 0.35,
+      "expected_rho": 0.35,
+      "computed_rho": 0.35,
+      "verified": true
+    },
+    {
+      "signal": "S2_velocity",
+      "weight": 0.07,
+      "expected_rho": 0.07,
+      "computed_rho": 0.07,
+      "verified": true
+    }
+  ],
+  "combo_verification": [
+    {
+      "combo": "R3_geo + R6_cred",
+      "factor": 1.5,
+      "base_score": 0.53,
+      "final_score": 0.6778,
+      "expected_final": 0.6778,
+      "verified": true,
+      "combo_fired": true
+    },
+    {
+      "combo": "R2_device + R6_cred",
+      "factor": 1.45,
+      "base_score": 0.45,
+      "final_score": 0.5797,
+      "expected_final": 0.5797,
+      "verified": true,
+      "combo_fired": true
+    },
+    {
+      "combo": "R3_geo + R2_device",
+      "factor": 1.35,
+      "base_score": 0.28,
+      "final_score": 0.3582,
+      "expected_final": 0.3582,
+      "verified": true,
+      "combo_fired": true
+    },
+    {
+      "combo": "R5_rate + S2_velocity",
+      "factor": 1.3,
+      "base_score": 0.2,
+      "final_score": 0.2518,
+      "expected_final": 0.2518,
+      "verified": true,
+      "combo_fired": true
+    },
+    {
+      "combo": "R4_temporal + R5_rate",
+      "factor": 1.25,
+      "base_score": 0.17,
+      "final_score": 0.2078,
+      "expected_final": 0.2078,
+      "verified": true,
+      "combo_fired": true
+    },
+    {
+      "combo": "R2_device + R5_rate",
+      "factor": 1.2,
+      "base_score": 0.23,
+      "final_score": 0.2692,
+      "expected_final": 0.2692,
+      "verified": true,
+      "combo_fired": true
+    },
+    {
+      "combo": "R1_baseline + R2_device",
+      "factor": 1.15,
+      "base_score": 0.23,
+      "final_score": 0.2596,
+      "expected_final": 0.2596,
+      "verified": true,
+      "combo_fired": true
+    },
+    {
+      "combo": "R3_geo + R5_rate",
+      "factor": 1.3,
+      "base_score": 0.31,
+      "final_score": 0.3827,
+      "expected_final": 0.3827,
+      "verified": true,
+      "combo_fired": true
+    },
+    {
+      "combo": "R1_baseline + R6_cred",
+      "factor": 1.45,
+      "base_score": 0.48,
+      "final_score": 0.6126,
+      "expected_final": 0.6126,
+      "verified": true,
+      "combo_fired": true
+    }
+  ],
+  "threshold_verification": [
+    {
+      "label": "just below flag \u03c4\u2081",
+      "rho": 0.119,
+      "expected_action": "allow",
+      "actual_action": "allow",
+      "verified": true
+    },
+    {
+      "label": "exactly at flag \u03c4\u2081",
+      "rho": 0.12,
+      "expected_action": "flag",
+      "actual_action": "flag",
+      "verified": true
+    },
+    {
+      "label": "just above flag \u03c4\u2081",
+      "rho": 0.121,
+      "expected_action": "flag",
+      "actual_action": "flag",
+      "verified": true
+    },
+    {
+      "label": "just below mfa \u03c4\u2082",
+      "rho": 0.399,
+      "expected_action": "flag",
+      "actual_action": "flag",
+      "verified": true
+    },
+    {
+      "label": "exactly at mfa \u03c4\u2082",
+      "rho": 0.4,
+      "expected_action": "mfa",
+      "actual_action": "mfa",
+      "verified": true
+    },
+    {
+      "label": "just above mfa \u03c4\u2082",
+      "rho": 0.401,
+      "expected_action": "mfa",
+      "actual_action": "mfa",
+      "verified": true
+    },
+    {
+      "label": "just below block \u03c4\u2083",
+      "rho": 0.799,
+      "expected_action": "mfa",
+      "actual_action": "mfa",
+      "verified": true
+    },
+    {
+      "label": "exactly at block \u03c4\u2083",
+      "rho": 0.8,
+      "expected_action": "block",
+      "actual_action": "block",
+      "verified": true
+    },
+    {
+      "label": "just above block \u03c4\u2083",
+      "rho": 0.801,
+      "expected_action": "block",
+      "actual_action": "block",
+      "verified": true
+    }
+  ],
+  "confusion_matrix": {
+    "TP": 61,
+    "TN": 40,
+    "FP": 0,
+    "FN": 4,
+    "precision": 1.0,
+    "recall": 0.9385,
+    "f1": 0.9683,
+    "fpr": 0.0,
+    "fnr": 0.0615,
+    "accuracy": 0.9619,
+    "specificity": 1.0,
+    "npv": 0.9091
+  },
+  "confusion_matrix_details": [
+    {
+      "name": "B01 Clean baseline",
+      "category": "benign_clean",
+      "is_threat": false,
+      "predicted": false,
+      "label": "TN",
+      "rho": 0.0,
+      "action": "allow",
+      "active": [],
+      "combos": []
+    },
+    {
+      "name": "B02 All zeros explicit",
+      "category": "benign_clean",
+      "is_threat": false,
+      "predicted": false,
+      "label": "TN",
+      "rho": 0.0,
+      "action": "allow",
+      "active": [],
+      "combos": []
+    },
+    {
+      "name": "B03 Known device known IP",
+      "category": "benign_clean",
+      "is_threat": false,
+      "predicted": false,
+      "label": "TN",
+      "rho": 0.0,
+      "action": "allow",
+      "active": [],
+      "combos": []
+    },
+    {
+      "name": "B04 Daytime clean",
+      "category": "benign_clean",
+      "is_threat": false,
+      "predicted": false,
+      "label": "TN",
+      "rho": 0.0,
+      "action": "allow",
+      "active": [],
+      "combos": []
+    },
+    {
+      "name": "B05 Researcher clean session",
+      "category": "benign_clean",
+      "is_threat": false,
+      "predicted": false,
+      "label": "TN",
+      "rho": 0.0,
+      "action": "allow",
+      "active": [],
+      "combos": []
+    },
+    {
+      "name": "B06 Night access R4=0.1",
+      "category": "benign_temporal",
+      "is_threat": false,
+      "predicted": false,
+      "label": "TN",
+      "rho": 0.004,
+      "action": "allow",
+      "active": [
+        "R4_temporal"
+      ],
+      "combos": []
+    },
+    {
+      "name": "B07 Night access R4=0.2",
+      "category": "benign_temporal",
+      "is_threat": false,
+      "predicted": false,
+      "label": "TN",
+      "rho": 0.008,
+      "action": "allow",
+      "active": [
+        "R4_temporal"
+      ],
+      "combos": []
+    },
+    {
+      "name": "B08 Night access R4=0.3",
+      "category": "benign_temporal",
+      "is_threat": false,
+      "predicted": false,
+      "label": "TN",
+      "rho": 0.012,
+      "action": "allow",
+      "active": [
+        "R4_temporal"
+      ],
+      "combos": []
+    },
+    {
+      "name": "B09 Night access R4=0.4",
+      "category": "benign_temporal",
+      "is_threat": false,
+      "predicted": false,
+      "label": "TN",
+      "rho": 0.016,
+      "action": "allow",
+      "active": [
+        "R4_temporal"
+      ],
+      "combos": []
+    },
+    {
+      "name": "B10 Night access R4=0.5",
+      "category": "benign_temporal",
+      "is_threat": false,
+      "predicted": false,
+      "label": "TN",
+      "rho": 0.02,
+      "action": "allow",
+      "active": [
+        "R4_temporal"
+      ],
+      "combos": []
+    },
+    {
+      "name": "B11 Mild rate R5=0.1",
+      "category": "benign_rate",
+      "is_threat": false,
+      "predicted": false,
+      "label": "TN",
+      "rho": 0.013,
+      "action": "allow",
+      "active": [
+        "R5_rate"
+      ],
+      "combos": []
+    },
+    {
+      "name": "B12 Mild rate R5=0.2",
+      "category": "benign_rate",
+      "is_threat": false,
+      "predicted": false,
+      "label": "TN",
+      "rho": 0.026,
+      "action": "allow",
+      "active": [
+        "R5_rate"
+      ],
+      "combos": []
+    },
+    {
+      "name": "B13 Mild rate R5=0.3",
+      "category": "benign_rate",
+      "is_threat": false,
+      "predicted": false,
+      "label": "TN",
+      "rho": 0.039,
+      "action": "allow",
+      "active": [
+        "R5_rate"
+      ],
+      "combos": []
+    },
+    {
+      "name": "B14 Resource R1=0.1",
+      "category": "benign_resource",
+      "is_threat": false,
+      "predicted": false,
+      "label": "TN",
+      "rho": 0.013,
+      "action": "allow",
+      "active": [
+        "R1_baseline"
+      ],
+      "combos": []
+    },
+    {
+      "name": "B15 Resource R1=0.2",
+      "category": "benign_resource",
+      "is_threat": false,
+      "predicted": false,
+      "label": "TN",
+      "rho": 0.026,
+      "action": "allow",
+      "active": [
+        "R1_baseline"
+      ],
+      "combos": []
+    },
+    {
+      "name": "B16 Resource R1=0.3",
+      "category": "benign_resource",
+      "is_threat": false,
+      "predicted": false,
+      "label": "TN",
+      "rho": 0.039,
+      "action": "allow",
+      "active": [
+        "R1_baseline"
+      ],
+      "combos": []
+    },
+    {
+      "name": "B17 1 failed login R6=0",
+      "category": "benign_credential",
+      "is_threat": false,
+      "predicted": false,
+      "label": "TN",
+      "rho": 0.0,
+      "action": "allow",
+      "active": [],
+      "combos": []
+    },
+    {
+      "name": "B18 2 failed logins R6=0",
+      "category": "benign_credential",
+      "is_threat": false,
+      "predicted": false,
+      "label": "TN",
+      "rho": 0.0,
+      "action": "allow",
+      "active": [],
+      "combos": []
+    },
+    {
+      "name": "B19 Mild velocity S2=0.1",
+      "category": "benign_velocity",
+      "is_threat": false,
+      "predicted": false,
+      "label": "TN",
+      "rho": 0.007,
+      "action": "allow",
+      "active": [
+        "S2_velocity"
+      ],
+      "combos": []
+    },
+    {
+      "name": "B20 Mild velocity S2=0.2",
+      "category": "benign_velocity",
+      "is_threat": false,
+      "predicted": false,
+      "label": "TN",
+      "rho": 0.014,
+      "action": "allow",
+      "active": [
+        "S2_velocity"
+      ],
+      "combos": []
+    },
+    {
+      "name": "B21 Low R4+R5",
+      "category": "benign_combo",
+      "is_threat": false,
+      "predicted": false,
+      "label": "TN",
+      "rho": 0.0262,
+      "action": "allow",
+      "active": [
+        "R4_temporal",
+        "R5_rate"
+      ],
+      "combos": [
+        "COMBO:R4_temporal+R5_rate(\u00d71.25)"
+      ]
+    },
+    {
+      "name": "B22 Low R1+S2",
+      "category": "benign_combo",
+      "is_threat": false,
+      "predicted": false,
+      "label": "TN",
+      "rho": 0.02,
+      "action": "allow",
+      "active": [
+        "R1_baseline",
+        "S2_velocity"
+      ],
+      "combos": []
+    },
+    {
+      "name": "B23 Low R4+S2",
+      "category": "benign_combo",
+      "is_threat": false,
+      "predicted": false,
+      "label": "TN",
+      "rho": 0.019,
+      "action": "allow",
+      "active": [
+        "R4_temporal",
+        "S2_velocity"
+      ],
+      "combos": []
+    },
+    {
+      "name": "B24 Very low all signals",
+      "category": "benign_combo",
+      "is_threat": false,
+      "predicted": false,
+      "label": "TN",
+      "rho": 0.0187,
+      "action": "allow",
+      "active": [
+        "R1_baseline",
+        "R4_temporal",
+        "R5_rate"
+      ],
+      "combos": [
+        "COMBO:R4_temporal+R5_rate(\u00d71.25)"
+      ]
+    },
+    {
+      "name": "B25 Low R2 partial",
+      "category": "benign_combo",
+      "is_threat": false,
+      "predicted": false,
+      "label": "TN",
+      "rho": 0.01,
+      "action": "allow",
+      "active": [
+        "R2_device"
+      ],
+      "combos": []
+    },
+    {
+      "name": "B26 Low R2+R4",
+      "category": "benign_combo",
+      "is_threat": false,
+      "predicted": false,
+      "label": "TN",
+      "rho": 0.018,
+      "action": "allow",
+      "active": [
+        "R2_device",
+        "R4_temporal"
+      ],
+      "combos": []
+    },
+    {
+      "name": "B27 Low R1+R4",
+      "category": "benign_combo",
+      "is_threat": false,
+      "predicted": false,
+      "label": "TN",
+      "rho": 0.025,
+      "action": "allow",
+      "active": [
+        "R1_baseline",
+        "R4_temporal"
+      ],
+      "combos": []
+    },
+    {
+      "name": "B28 Low R5+S2 no combo",
+      "category": "benign_combo",
+      "is_threat": false,
+      "predicted": false,
+      "label": "TN",
+      "rho": 0.0259,
+      "action": "allow",
+      "active": [
+        "R5_rate",
+        "S2_velocity"
+      ],
+      "combos": [
+        "COMBO:R5_rate+S2_velocity(\u00d71.3)"
+      ]
+    },
+    {
+      "name": "B29 Low R3 partial",
+      "category": "benign_geo",
+      "is_threat": false,
+      "predicted": false,
+      "label": "TN",
+      "rho": 0.018,
+      "action": "allow",
+      "active": [
+        "R3_geo"
+      ],
+      "combos": []
+    },
+    {
+      "name": "B30 Low R3+R4",
+      "category": "benign_geo",
+      "is_threat": false,
+      "predicted": false,
+      "label": "TN",
+      "rho": 0.026,
+      "action": "allow",
+      "active": [
+        "R3_geo",
+        "R4_temporal"
+      ],
+      "combos": []
+    },
+    {
+      "name": "B31 Just below flag R5",
+      "category": "benign_edge",
+      "is_threat": false,
+      "predicted": false,
+      "label": "TN",
+      "rho": 0.039,
+      "action": "allow",
+      "active": [
+        "R5_rate"
+      ],
+      "combos": []
+    },
+    {
+      "name": "B32 Just below flag R1",
+      "category": "benign_edge",
+      "is_threat": false,
+      "predicted": false,
+      "label": "TN",
+      "rho": 0.039,
+      "action": "allow",
+      "active": [
+        "R1_baseline"
+      ],
+      "combos": []
+    },
+    {
+      "name": "B33 Just below flag R3",
+      "category": "benign_edge",
+      "is_threat": false,
+      "predicted": false,
+      "label": "TN",
+      "rho": 0.036,
+      "action": "allow",
+      "active": [
+        "R3_geo"
+      ],
+      "combos": []
+    },
+    {
+      "name": "B34 Just below flag multi",
+      "category": "benign_edge",
+      "is_threat": false,
+      "predicted": false,
+      "label": "TN",
+      "rho": 0.034,
+      "action": "allow",
+      "active": [
+        "R4_temporal",
+        "S2_velocity"
+      ],
+      "combos": []
+    },
+    {
+      "name": "B35 Very mild R6=0.3",
+      "category": "benign_edge",
+      "is_threat": false,
+      "predicted": false,
+      "label": "TN",
+      "rho": 0.105,
+      "action": "allow",
+      "active": [
+        "R6_cred"
+      ],
+      "combos": []
+    },
+    {
+      "name": "B36 Normal submission pattern",
+      "category": "benign_normal",
+      "is_threat": false,
+      "predicted": false,
+      "label": "TN",
+      "rho": 0.026,
+      "action": "allow",
+      "active": [
+        "R1_baseline",
+        "R5_rate"
+      ],
+      "combos": []
+    },
+    {
+      "name": "B37 Daytime high resource",
+      "category": "benign_normal",
+      "is_threat": false,
+      "predicted": false,
+      "label": "TN",
+      "rho": 0.039,
+      "action": "allow",
+      "active": [
+        "R1_baseline",
+        "R5_rate"
+      ],
+      "combos": []
+    },
+    {
+      "name": "B38 Known device night",
+      "category": "benign_normal",
+      "is_threat": false,
+      "predicted": false,
+      "label": "TN",
+      "rho": 0.016,
+      "action": "allow",
+      "active": [
+        "R4_temporal"
+      ],
+      "combos": []
+    },
+    {
+      "name": "B39 Mild all signals",
+      "category": "benign_normal",
+      "is_threat": false,
+      "predicted": false,
+      "label": "TN",
+      "rho": 0.0331,
+      "action": "allow",
+      "active": [
+        "R1_baseline",
+        "R4_temporal",
+        "R5_rate",
+        "S2_velocity"
+      ],
+      "combos": [
+        "COMBO:R5_rate+S2_velocity(\u00d71.3)",
+        "COMBO:R4_temporal+R5_rate(\u00d71.25)"
+      ]
+    },
+    {
+      "name": "B40 Clean after previous flag",
+      "category": "benign_normal",
+      "is_threat": false,
+      "predicted": false,
+      "label": "TN",
+      "rho": 0.0,
+      "action": "allow",
+      "active": [],
+      "combos": []
+    },
+    {
+      "name": "T01 Brute force R6=0.7",
+      "category": "credential",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.245,
+      "action": "flag",
+      "active": [
+        "R6_cred"
+      ],
+      "combos": []
+    },
+    {
+      "name": "T02 Brute force R6=1.0",
+      "category": "credential",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.35,
+      "action": "mfa",
+      "active": [
+        "R6_cred"
+      ],
+      "combos": []
+    },
+    {
+      "name": "T03 Credential R6=0.7 night",
+      "category": "credential",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.265,
+      "action": "flag",
+      "active": [
+        "R4_temporal",
+        "R6_cred"
+      ],
+      "combos": []
+    },
+    {
+      "name": "T04 Credential R6=1.0 night",
+      "category": "credential",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.39,
+      "action": "mfa",
+      "active": [
+        "R4_temporal",
+        "R6_cred"
+      ],
+      "combos": []
+    },
+    {
+      "name": "T05 Credential + rate",
+      "category": "credential",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.31,
+      "action": "flag",
+      "active": [
+        "R5_rate",
+        "R6_cred"
+      ],
+      "combos": []
+    },
+    {
+      "name": "T06 Rate flood R5=0.7",
+      "category": "rate",
+      "is_threat": true,
+      "predicted": false,
+      "label": "FN",
+      "rho": 0.091,
+      "action": "allow",
+      "active": [
+        "R5_rate"
+      ],
+      "combos": []
+    },
+    {
+      "name": "T07 Rate flood R5=1.0",
+      "category": "rate",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.13,
+      "action": "flag",
+      "active": [
+        "R5_rate"
+      ],
+      "combos": []
+    },
+    {
+      "name": "T08 Rate + temporal",
+      "category": "rate",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.1368,
+      "action": "flag",
+      "active": [
+        "R4_temporal",
+        "R5_rate"
+      ],
+      "combos": [
+        "COMBO:R4_temporal+R5_rate(\u00d71.25)"
+      ]
+    },
+    {
+      "name": "T09 Rate + resource",
+      "category": "rate",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.195,
+      "action": "flag",
+      "active": [
+        "R1_baseline",
+        "R5_rate"
+      ],
+      "combos": []
+    },
+    {
+      "name": "T10 Rate + velocity partial",
+      "category": "rate",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.1431,
+      "action": "flag",
+      "active": [
+        "R5_rate",
+        "S2_velocity"
+      ],
+      "combos": [
+        "COMBO:R5_rate+S2_velocity(\u00d71.3)"
+      ]
+    },
+    {
+      "name": "T11 New device R2=1.0",
+      "category": "device",
+      "is_threat": true,
+      "predicted": false,
+      "label": "FN",
+      "rho": 0.1,
+      "action": "allow",
+      "active": [
+        "R2_device"
+      ],
+      "combos": []
+    },
+    {
+      "name": "T12 New device + night",
+      "category": "device",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.12,
+      "action": "flag",
+      "active": [
+        "R2_device",
+        "R4_temporal"
+      ],
+      "combos": []
+    },
+    {
+      "name": "T13 New device + rate mild",
+      "category": "device",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.1644,
+      "action": "flag",
+      "active": [
+        "R2_device",
+        "R5_rate"
+      ],
+      "combos": [
+        "COMBO:R2_device+R5_rate(\u00d71.2)"
+      ]
+    },
+    {
+      "name": "T14 Foreign access R3=0.7",
+      "category": "geo",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.126,
+      "action": "flag",
+      "active": [
+        "R3_geo"
+      ],
+      "combos": []
+    },
+    {
+      "name": "T15 Foreign access R3=1.0",
+      "category": "geo",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.18,
+      "action": "flag",
+      "active": [
+        "R3_geo"
+      ],
+      "combos": []
+    },
+    {
+      "name": "T16 Foreign + night",
+      "category": "geo",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.2,
+      "action": "flag",
+      "active": [
+        "R3_geo",
+        "R4_temporal"
+      ],
+      "combos": []
+    },
+    {
+      "name": "T17 Foreign + rate mild",
+      "category": "geo",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.209,
+      "action": "flag",
+      "active": [
+        "R3_geo",
+        "R5_rate"
+      ],
+      "combos": [
+        "COMBO:R3_geo+R5_rate(\u00d71.3)"
+      ]
+    },
+    {
+      "name": "T18 Resource spike R1=1.0",
+      "category": "resource",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.13,
+      "action": "flag",
+      "active": [
+        "R1_baseline"
+      ],
+      "combos": []
+    },
+    {
+      "name": "T19 Resource + device",
+      "category": "resource",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.204,
+      "action": "flag",
+      "active": [
+        "R1_baseline",
+        "R2_device"
+      ],
+      "combos": [
+        "COMBO:R1_baseline+R2_device(\u00d71.15)"
+      ]
+    },
+    {
+      "name": "T20 Resource + night",
+      "category": "resource",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.17,
+      "action": "flag",
+      "active": [
+        "R1_baseline",
+        "R4_temporal"
+      ],
+      "combos": []
+    },
+    {
+      "name": "T21 Velocity S2=1.0",
+      "category": "velocity",
+      "is_threat": true,
+      "predicted": false,
+      "label": "FN",
+      "rho": 0.07,
+      "action": "allow",
+      "active": [
+        "S2_velocity"
+      ],
+      "combos": []
+    },
+    {
+      "name": "T22 Velocity + rate",
+      "category": "velocity",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.1718,
+      "action": "flag",
+      "active": [
+        "R5_rate",
+        "S2_velocity"
+      ],
+      "combos": [
+        "COMBO:R5_rate+S2_velocity(\u00d71.3)"
+      ]
+    },
+    {
+      "name": "T23 Velocity + night",
+      "category": "velocity",
+      "is_threat": true,
+      "predicted": false,
+      "label": "FN",
+      "rho": 0.09,
+      "action": "allow",
+      "active": [
+        "R4_temporal",
+        "S2_velocity"
+      ],
+      "combos": []
+    },
+    {
+      "name": "T24 Account takeover R2+R6 full",
+      "category": "combo_R2_R6",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.5797,
+      "action": "mfa",
+      "active": [
+        "R2_device",
+        "R6_cred"
+      ],
+      "combos": [
+        "COMBO:R2_device+R6_cred(\u00d71.45)"
+      ]
+    },
+    {
+      "name": "T25 Account takeover partial",
+      "category": "combo_R2_R6",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.4222,
+      "action": "mfa",
+      "active": [
+        "R2_device",
+        "R6_cred"
+      ],
+      "combos": [
+        "COMBO:R2_device+R6_cred(\u00d71.45)"
+      ]
+    },
+    {
+      "name": "T26 Account takeover + night",
+      "category": "combo_R2_R6",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.6233,
+      "action": "mfa",
+      "active": [
+        "R2_device",
+        "R4_temporal",
+        "R6_cred"
+      ],
+      "combos": [
+        "COMBO:R2_device+R6_cred(\u00d71.45)"
+      ]
+    },
+    {
+      "name": "T27 Account takeover + rate",
+      "category": "combo_R2_R6",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.7161,
+      "action": "mfa",
+      "active": [
+        "R2_device",
+        "R5_rate",
+        "R6_cred"
+      ],
+      "combos": [
+        "COMBO:R2_device+R6_cred(\u00d71.45)",
+        "COMBO:R2_device+R5_rate(\u00d71.2)"
+      ]
+    },
+    {
+      "name": "T28 Foreign credential full",
+      "category": "combo_R3_R6",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.6778,
+      "action": "mfa",
+      "active": [
+        "R3_geo",
+        "R6_cred"
+      ],
+      "combos": [
+        "COMBO:R3_geo+R6_cred(\u00d71.5)"
+      ]
+    },
+    {
+      "name": "T29 Foreign credential partial",
+      "category": "combo_R3_R6",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.5011,
+      "action": "mfa",
+      "active": [
+        "R3_geo",
+        "R6_cred"
+      ],
+      "combos": [
+        "COMBO:R3_geo+R6_cred(\u00d71.5)"
+      ]
+    },
+    {
+      "name": "T30 Foreign credential + rate",
+      "category": "combo_R3_R6",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.8284,
+      "action": "block",
+      "active": [
+        "R3_geo",
+        "R5_rate",
+        "R6_cred"
+      ],
+      "combos": [
+        "COMBO:R3_geo+R6_cred(\u00d71.5)",
+        "COMBO:R3_geo+R5_rate(\u00d71.3)"
+      ]
+    },
+    {
+      "name": "T31 Remote attacker full",
+      "category": "combo_R3_R2",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.3582,
+      "action": "flag",
+      "active": [
+        "R2_device",
+        "R3_geo"
+      ],
+      "combos": [
+        "COMBO:R3_geo+R2_device(\u00d71.35)"
+      ]
+    },
+    {
+      "name": "T32 Remote attacker partial",
+      "category": "combo_R3_R2",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.2551,
+      "action": "flag",
+      "active": [
+        "R2_device",
+        "R3_geo"
+      ],
+      "combos": [
+        "COMBO:R3_geo+R2_device(\u00d71.35)"
+      ]
+    },
+    {
+      "name": "T33 Remote attacker + cred",
+      "category": "combo_R3_R2",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.8876,
+      "action": "block",
+      "active": [
+        "R2_device",
+        "R3_geo",
+        "R6_cred"
+      ],
+      "combos": [
+        "COMBO:R3_geo+R6_cred(\u00d71.5)",
+        "COMBO:R2_device+R6_cred(\u00d71.45)",
+        "COMBO:R3_geo+R2_device(\u00d71.35)"
+      ]
+    },
+    {
+      "name": "T34 Bot confirmed full",
+      "category": "combo_R5_S2",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.2518,
+      "action": "flag",
+      "active": [
+        "R5_rate",
+        "S2_velocity"
+      ],
+      "combos": [
+        "COMBO:R5_rate+S2_velocity(\u00d71.3)"
+      ]
+    },
+    {
+      "name": "T35 Bot confirmed partial",
+      "category": "combo_R5_S2",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.178,
+      "action": "flag",
+      "active": [
+        "R5_rate",
+        "S2_velocity"
+      ],
+      "combos": [
+        "COMBO:R5_rate+S2_velocity(\u00d71.3)"
+      ]
+    },
+    {
+      "name": "T36 Bot confirmed + night",
+      "category": "combo_R5_S2",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.3598,
+      "action": "flag",
+      "active": [
+        "R4_temporal",
+        "R5_rate",
+        "S2_velocity"
+      ],
+      "combos": [
+        "COMBO:R5_rate+S2_velocity(\u00d71.3)",
+        "COMBO:R4_temporal+R5_rate(\u00d71.25)"
+      ]
+    },
+    {
+      "name": "T37 Bot confirmed + device",
+      "category": "combo_R5_S2",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.4267,
+      "action": "mfa",
+      "active": [
+        "R2_device",
+        "R5_rate",
+        "S2_velocity"
+      ],
+      "combos": [
+        "COMBO:R5_rate+S2_velocity(\u00d71.3)",
+        "COMBO:R2_device+R5_rate(\u00d71.2)"
+      ]
+    },
+    {
+      "name": "T38 Off-hours bot full",
+      "category": "combo_R4_R5",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.2078,
+      "action": "flag",
+      "active": [
+        "R4_temporal",
+        "R5_rate"
+      ],
+      "combos": [
+        "COMBO:R4_temporal+R5_rate(\u00d71.25)"
+      ]
+    },
+    {
+      "name": "T39 Off-hours bot partial",
+      "category": "combo_R4_R5",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.1465,
+      "action": "flag",
+      "active": [
+        "R4_temporal",
+        "R5_rate"
+      ],
+      "combos": [
+        "COMBO:R4_temporal+R5_rate(\u00d71.25)"
+      ]
+    },
+    {
+      "name": "T40 Off-hours bot + cred",
+      "category": "combo_R4_R5",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.4884,
+      "action": "mfa",
+      "active": [
+        "R4_temporal",
+        "R5_rate",
+        "R6_cred"
+      ],
+      "combos": [
+        "COMBO:R4_temporal+R5_rate(\u00d71.25)"
+      ]
+    },
+    {
+      "name": "T41 Scripted attack full",
+      "category": "combo_R2_R5",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.2692,
+      "action": "flag",
+      "active": [
+        "R2_device",
+        "R5_rate"
+      ],
+      "combos": [
+        "COMBO:R2_device+R5_rate(\u00d71.2)"
+      ]
+    },
+    {
+      "name": "T42 Scripted attack partial",
+      "category": "combo_R2_R5",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.1899,
+      "action": "flag",
+      "active": [
+        "R2_device",
+        "R5_rate"
+      ],
+      "combos": [
+        "COMBO:R2_device+R5_rate(\u00d71.2)"
+      ]
+    },
+    {
+      "name": "T43 Scripted attack + cred",
+      "category": "combo_R2_R5",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.6741,
+      "action": "mfa",
+      "active": [
+        "R2_device",
+        "R5_rate",
+        "R6_cred"
+      ],
+      "combos": [
+        "COMBO:R2_device+R6_cred(\u00d71.45)",
+        "COMBO:R2_device+R5_rate(\u00d71.2)"
+      ]
+    },
+    {
+      "name": "T44 Resource abuse full",
+      "category": "combo_R1_R2",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.2596,
+      "action": "flag",
+      "active": [
+        "R1_baseline",
+        "R2_device"
+      ],
+      "combos": [
+        "COMBO:R1_baseline+R2_device(\u00d71.15)"
+      ]
+    },
+    {
+      "name": "T45 Resource abuse partial",
+      "category": "combo_R1_R2",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.1828,
+      "action": "flag",
+      "active": [
+        "R1_baseline",
+        "R2_device"
+      ],
+      "combos": [
+        "COMBO:R1_baseline+R2_device(\u00d71.15)"
+      ]
+    },
+    {
+      "name": "T46 Foreign scripted full",
+      "category": "combo_R3_R5",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.3827,
+      "action": "flag",
+      "active": [
+        "R3_geo",
+        "R5_rate"
+      ],
+      "combos": [
+        "COMBO:R3_geo+R5_rate(\u00d71.3)"
+      ]
+    },
+    {
+      "name": "T47 Foreign scripted partial",
+      "category": "combo_R3_R5",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.2724,
+      "action": "flag",
+      "active": [
+        "R3_geo",
+        "R5_rate"
+      ],
+      "combos": [
+        "COMBO:R3_geo+R5_rate(\u00d71.3)"
+      ]
+    },
+    {
+      "name": "T48 Resource takeover full",
+      "category": "combo_R1_R6",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.6126,
+      "action": "mfa",
+      "active": [
+        "R1_baseline",
+        "R6_cred"
+      ],
+      "combos": [
+        "COMBO:R1_baseline+R6_cred(\u00d71.45)"
+      ]
+    },
+    {
+      "name": "T49 Resource takeover partial",
+      "category": "combo_R1_R6",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.4477,
+      "action": "mfa",
+      "active": [
+        "R1_baseline",
+        "R6_cred"
+      ],
+      "combos": [
+        "COMBO:R1_baseline+R6_cred(\u00d71.45)"
+      ]
+    },
+    {
+      "name": "T50 Full attack R2+R5+R6",
+      "category": "multi_signal",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.779,
+      "action": "mfa",
+      "active": [
+        "R2_device",
+        "R5_rate",
+        "R6_cred"
+      ],
+      "combos": [
+        "COMBO:R2_device+R6_cred(\u00d71.45)",
+        "COMBO:R2_device+R5_rate(\u00d71.2)"
+      ]
+    },
+    {
+      "name": "T51 Critical R3+R6+R5",
+      "category": "multi_signal",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.878,
+      "action": "block",
+      "active": [
+        "R3_geo",
+        "R5_rate",
+        "R6_cred"
+      ],
+      "combos": [
+        "COMBO:R3_geo+R6_cred(\u00d71.5)",
+        "COMBO:R3_geo+R5_rate(\u00d71.3)"
+      ]
+    },
+    {
+      "name": "T52 Full foreign attack",
+      "category": "multi_signal",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.946,
+      "action": "block",
+      "active": [
+        "R2_device",
+        "R3_geo",
+        "R6_cred"
+      ],
+      "combos": [
+        "COMBO:R3_geo+R6_cred(\u00d71.5)",
+        "COMBO:R2_device+R6_cred(\u00d71.45)",
+        "COMBO:R3_geo+R2_device(\u00d71.35)"
+      ]
+    },
+    {
+      "name": "T53 Night bot attack",
+      "category": "multi_signal",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.3598,
+      "action": "flag",
+      "active": [
+        "R4_temporal",
+        "R5_rate",
+        "S2_velocity"
+      ],
+      "combos": [
+        "COMBO:R5_rate+S2_velocity(\u00d71.3)",
+        "COMBO:R4_temporal+R5_rate(\u00d71.25)"
+      ]
+    },
+    {
+      "name": "T54 Full resource attack",
+      "category": "multi_signal",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.4598,
+      "action": "mfa",
+      "active": [
+        "R1_baseline",
+        "R2_device",
+        "R5_rate"
+      ],
+      "combos": [
+        "COMBO:R2_device+R5_rate(\u00d71.2)",
+        "COMBO:R1_baseline+R2_device(\u00d71.15)"
+      ]
+    },
+    {
+      "name": "T55 All signals moderate",
+      "category": "multi_signal",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.9998,
+      "action": "block",
+      "active": [
+        "R1_baseline",
+        "R2_device",
+        "R3_geo",
+        "R4_temporal",
+        "R5_rate",
+        "R6_cred",
+        "S2_velocity"
+      ],
+      "combos": [
+        "COMBO:R3_geo+R6_cred(\u00d71.5)",
+        "COMBO:R2_device+R6_cred(\u00d71.45)",
+        "COMBO:R3_geo+R2_device(\u00d71.35)",
+        "COMBO:R5_rate+S2_velocity(\u00d71.3)",
+        "COMBO:R4_temporal+R5_rate(\u00d71.25)",
+        "COMBO:R2_device+R5_rate(\u00d71.2)",
+        "COMBO:R1_baseline+R2_device(\u00d71.15)",
+        "COMBO:R3_geo+R5_rate(\u00d71.3)",
+        "COMBO:R1_baseline+R6_cred(\u00d71.45)"
+      ]
+    },
+    {
+      "name": "T56 All signals full",
+      "category": "multi_signal",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 1.0,
+      "action": "block",
+      "active": [
+        "R1_baseline",
+        "R2_device",
+        "R3_geo",
+        "R4_temporal",
+        "R5_rate",
+        "R6_cred",
+        "S2_velocity"
+      ],
+      "combos": [
+        "COMBO:R3_geo+R6_cred(\u00d71.5)",
+        "COMBO:R2_device+R6_cred(\u00d71.45)",
+        "COMBO:R3_geo+R2_device(\u00d71.35)",
+        "COMBO:R5_rate+S2_velocity(\u00d71.3)",
+        "COMBO:R4_temporal+R5_rate(\u00d71.25)",
+        "COMBO:R2_device+R5_rate(\u00d71.2)",
+        "COMBO:R1_baseline+R2_device(\u00d71.15)",
+        "COMBO:R3_geo+R5_rate(\u00d71.3)",
+        "COMBO:R1_baseline+R6_cred(\u00d71.45)"
+      ]
+    },
+    {
+      "name": "T57 Foreign bot attack",
+      "category": "multi_signal",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.5542,
+      "action": "mfa",
+      "active": [
+        "R3_geo",
+        "R5_rate",
+        "S2_velocity"
+      ],
+      "combos": [
+        "COMBO:R5_rate+S2_velocity(\u00d71.3)",
+        "COMBO:R3_geo+R5_rate(\u00d71.3)"
+      ]
+    },
+    {
+      "name": "T58 Credential + bot",
+      "category": "multi_signal",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.6459,
+      "action": "mfa",
+      "active": [
+        "R5_rate",
+        "R6_cred",
+        "S2_velocity"
+      ],
+      "combos": [
+        "COMBO:R5_rate+S2_velocity(\u00d71.3)"
+      ]
+    },
+    {
+      "name": "T59 Night credential bot",
+      "category": "multi_signal",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.6005,
+      "action": "mfa",
+      "active": [
+        "R4_temporal",
+        "R5_rate",
+        "R6_cred"
+      ],
+      "combos": [
+        "COMBO:R4_temporal+R5_rate(\u00d71.25)"
+      ]
+    },
+    {
+      "name": "T60 Device + foreign + rate",
+      "category": "multi_signal",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.6708,
+      "action": "mfa",
+      "active": [
+        "R2_device",
+        "R3_geo",
+        "R5_rate"
+      ],
+      "combos": [
+        "COMBO:R3_geo+R2_device(\u00d71.35)",
+        "COMBO:R2_device+R5_rate(\u00d71.2)",
+        "COMBO:R3_geo+R5_rate(\u00d71.3)"
+      ]
+    },
+    {
+      "name": "T61 Block: R3+R6+R2+R5",
+      "category": "block_level",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.9986,
+      "action": "block",
+      "active": [
+        "R2_device",
+        "R3_geo",
+        "R5_rate",
+        "R6_cred"
+      ],
+      "combos": [
+        "COMBO:R3_geo+R6_cred(\u00d71.5)",
+        "COMBO:R2_device+R6_cred(\u00d71.45)",
+        "COMBO:R3_geo+R2_device(\u00d71.35)",
+        "COMBO:R2_device+R5_rate(\u00d71.2)",
+        "COMBO:R3_geo+R5_rate(\u00d71.3)"
+      ]
+    },
+    {
+      "name": "T62 Block: all critical",
+      "category": "block_level",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 1.0,
+      "action": "block",
+      "active": [
+        "R2_device",
+        "R3_geo",
+        "R5_rate",
+        "R6_cred",
+        "S2_velocity"
+      ],
+      "combos": [
+        "COMBO:R3_geo+R6_cred(\u00d71.5)",
+        "COMBO:R2_device+R6_cred(\u00d71.45)",
+        "COMBO:R3_geo+R2_device(\u00d71.35)",
+        "COMBO:R5_rate+S2_velocity(\u00d71.3)",
+        "COMBO:R2_device+R5_rate(\u00d71.2)",
+        "COMBO:R3_geo+R5_rate(\u00d71.3)"
+      ]
+    },
+    {
+      "name": "T63 Block: R3+R6 full + extras",
+      "category": "block_level",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.9469,
+      "action": "block",
+      "active": [
+        "R3_geo",
+        "R4_temporal",
+        "R5_rate",
+        "R6_cred"
+      ],
+      "combos": [
+        "COMBO:R3_geo+R6_cred(\u00d71.5)",
+        "COMBO:R4_temporal+R5_rate(\u00d71.25)",
+        "COMBO:R3_geo+R5_rate(\u00d71.3)"
+      ]
+    },
+    {
+      "name": "T64 Partial R6=0.7 alone",
+      "category": "partial",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.245,
+      "action": "flag",
+      "active": [
+        "R6_cred"
+      ],
+      "combos": []
+    },
+    {
+      "name": "T65 Partial R3=0.7 alone",
+      "category": "partial",
+      "is_threat": true,
+      "predicted": true,
+      "label": "TP",
+      "rho": 0.126,
+      "action": "flag",
+      "active": [
+        "R3_geo"
+      ],
+      "combos": []
+    }
+  ],
+  "roc": {
+    "roc_points": [
+      {
+        "threshold": 0.12,
+        "tpr": 0.9385,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.126,
+        "tpr": 0.9231,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.13,
+        "tpr": 0.8923,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.1368,
+        "tpr": 0.8615,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.1431,
+        "tpr": 0.8462,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.1465,
+        "tpr": 0.8308,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.1644,
+        "tpr": 0.8154,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.17,
+        "tpr": 0.8,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.1718,
+        "tpr": 0.7846,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.178,
+        "tpr": 0.7692,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.18,
+        "tpr": 0.7538,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.1828,
+        "tpr": 0.7385,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.1899,
+        "tpr": 0.7231,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.195,
+        "tpr": 0.7077,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.2,
+        "tpr": 0.6923,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.204,
+        "tpr": 0.6769,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.2078,
+        "tpr": 0.6615,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.209,
+        "tpr": 0.6462,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.245,
+        "tpr": 0.6308,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.2518,
+        "tpr": 0.6,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.2551,
+        "tpr": 0.5846,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.2596,
+        "tpr": 0.5692,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.265,
+        "tpr": 0.5538,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.2692,
+        "tpr": 0.5385,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.2724,
+        "tpr": 0.5231,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.31,
+        "tpr": 0.5077,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.35,
+        "tpr": 0.4923,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.3582,
+        "tpr": 0.4769,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.3598,
+        "tpr": 0.4615,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.3827,
+        "tpr": 0.4308,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.39,
+        "tpr": 0.4154,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.4222,
+        "tpr": 0.4,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.4267,
+        "tpr": 0.3846,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.4477,
+        "tpr": 0.3692,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.4598,
+        "tpr": 0.3538,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.4884,
+        "tpr": 0.3385,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.5011,
+        "tpr": 0.3231,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.5542,
+        "tpr": 0.3077,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.5797,
+        "tpr": 0.2923,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.6005,
+        "tpr": 0.2769,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.6126,
+        "tpr": 0.2615,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.6233,
+        "tpr": 0.2462,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.6459,
+        "tpr": 0.2308,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.6708,
+        "tpr": 0.2154,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.6741,
+        "tpr": 0.2,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.6778,
+        "tpr": 0.1846,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.7161,
+        "tpr": 0.1692,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.779,
+        "tpr": 0.1538,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.8284,
+        "tpr": 0.1385,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.878,
+        "tpr": 0.1231,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.8876,
+        "tpr": 0.1077,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.946,
+        "tpr": 0.0923,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.9469,
+        "tpr": 0.0769,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.9986,
+        "tpr": 0.0615,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.9998,
+        "tpr": 0.0462,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 1.0,
+        "tpr": 0.0308,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.07,
+        "tpr": 1.0,
+        "fpr": 0.025
+      },
+      {
+        "threshold": 0.09,
+        "tpr": 0.9846,
+        "fpr": 0.025
+      },
+      {
+        "threshold": 0.091,
+        "tpr": 0.9692,
+        "fpr": 0.025
+      },
+      {
+        "threshold": 0.1,
+        "tpr": 0.9538,
+        "fpr": 0.025
+      },
+      {
+        "threshold": 0.105,
+        "tpr": 0.9385,
+        "fpr": 0.025
+      },
+      {
+        "threshold": 0.039,
+        "tpr": 1.0,
+        "fpr": 0.15
+      },
+      {
+        "threshold": 0.036,
+        "tpr": 1.0,
+        "fpr": 0.175
+      },
+      {
+        "threshold": 0.034,
+        "tpr": 1.0,
+        "fpr": 0.2
+      },
+      {
+        "threshold": 0.0331,
+        "tpr": 1.0,
+        "fpr": 0.225
+      },
+      {
+        "threshold": 0.0262,
+        "tpr": 1.0,
+        "fpr": 0.25
+      },
+      {
+        "threshold": 0.026,
+        "tpr": 1.0,
+        "fpr": 0.35
+      },
+      {
+        "threshold": 0.0259,
+        "tpr": 1.0,
+        "fpr": 0.375
+      },
+      {
+        "threshold": 0.025,
+        "tpr": 1.0,
+        "fpr": 0.4
+      },
+      {
+        "threshold": 0.02,
+        "tpr": 1.0,
+        "fpr": 0.45
+      },
+      {
+        "threshold": 0.019,
+        "tpr": 1.0,
+        "fpr": 0.475
+      },
+      {
+        "threshold": 0.0187,
+        "tpr": 1.0,
+        "fpr": 0.5
+      },
+      {
+        "threshold": 0.018,
+        "tpr": 1.0,
+        "fpr": 0.55
+      },
+      {
+        "threshold": 0.016,
+        "tpr": 1.0,
+        "fpr": 0.6
+      },
+      {
+        "threshold": 0.014,
+        "tpr": 1.0,
+        "fpr": 0.625
+      },
+      {
+        "threshold": 0.013,
+        "tpr": 1.0,
+        "fpr": 0.675
+      },
+      {
+        "threshold": 0.012,
+        "tpr": 1.0,
+        "fpr": 0.7
+      },
+      {
+        "threshold": 0.01,
+        "tpr": 1.0,
+        "fpr": 0.725
+      },
+      {
+        "threshold": 0.008,
+        "tpr": 1.0,
+        "fpr": 0.75
+      },
+      {
+        "threshold": 0.007,
+        "tpr": 1.0,
+        "fpr": 0.775
+      },
+      {
+        "threshold": 0.004,
+        "tpr": 1.0,
+        "fpr": 0.8
+      },
+      {
+        "threshold": 0.0,
+        "tpr": 1.0,
+        "fpr": 1.0
+      }
+    ],
+    "auc": 0.984,
+    "auc_baseline": 0.5,
+    "auc_improvement": 0.484
+  }
+}

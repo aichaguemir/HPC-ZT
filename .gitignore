@@ -20,3 +20,10 @@ venv/
 
 # Node
 node_modules/
+backend/.env
+backend/.env.bak.*
+certs/*.key
+certs.bak.*/
+uploads/
+keycloak-export/
+frontend/.env
