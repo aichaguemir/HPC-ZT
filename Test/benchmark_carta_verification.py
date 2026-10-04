@@ -321,40 +321,54 @@ def evaluate_confusion_matrix(test_cases):
 # ── ROC Curve ──────────────────────────────────────────────────────────────
 
 def compute_roc_curve(test_cases):
+    """ROC curve + rank-based (Mann-Whitney) AUC.
+
+    The rank-based AUC handles tied scores correctly (ties count as 0.5);
+    the previous trapezoidal integration under-counted when many thresholds
+    shared the same FPR (which happens here because nearly all benign
+    scenarios have rho < 0.12)."""
     scores = []
     for tc in test_cases:
         result = run_carta(tc["signals"])
         scores.append((result["rho"], tc["is_threat"]))
 
-    thresholds = sorted(set([s[0] for s in scores] + [0.0, 1.0]))
-    roc_points = []
+    # ── Rank-based AUC (Mann-Whitney U) ──────────────────────────────
+    pos = [s for s, y in scores if y]
+    neg = [s for s, y in scores if not y]
+    wins = 0.0
+    for p in pos:
+        for n in neg:
+            if p > n:
+                wins += 1.0
+            elif p == n:
+                wins += 0.5
+    auc = wins / (len(pos) * len(neg)) if pos and neg else 0.0
 
+    # ── ROC curve points (for the figure) ─────────────────────────────
+    thresholds = sorted(set([s[0] for s in scores] + [0.0, 1.0]), reverse=True)
+    roc_points = []
     for thresh in thresholds:
         TP = TN = FP = FN = 0
         for rho, is_threat in scores:
             predicted = rho >= thresh
-            if is_threat and predicted:           TP += 1
-            elif not is_threat and not predicted: TN += 1
-            elif not is_threat and predicted:     FP += 1
-            else:                                 FN += 1
-        tpr = TP / (TP + FN) if (TP + FN) > 0 else 0
-        fpr = FP / (FP + TN) if (FP + TN) > 0 else 0
-        roc_points.append({"threshold": round(thresh,4), "tpr": round(tpr,4), "fpr": round(fpr,4)})
+            if is_threat and predicted:            TP += 1
+            elif not is_threat and not predicted:  TN += 1
+            elif not is_threat and predicted:      FP += 1
+            else:                                  FN += 1
+        tpr = TP / (TP + FN) if (TP + FN) > 0 else 0.0
+        fpr = FP / (FP + TN) if (FP + TN) > 0 else 0.0
+        roc_points.append({"threshold": round(thresh, 4),
+                           "tpr":       round(tpr, 4),
+                           "fpr":       round(fpr, 4)})
 
-    roc_points.sort(key=lambda x: x["fpr"])
-
-    # AUC via trapezoidal rule
-    auc = 0.0
-    for i in range(1, len(roc_points)):
-        dx = roc_points[i]["fpr"] - roc_points[i-1]["fpr"]
-        dy = (roc_points[i]["tpr"] + roc_points[i-1]["tpr"]) / 2
-        auc += dx * dy
+    roc_points.sort(key=lambda x: (x["fpr"], x["tpr"]))
 
     return {
         "roc_points":      roc_points,
         "auc":             round(auc, 4),
         "auc_baseline":    0.5,
         "auc_improvement": round(auc - 0.5, 4),
+        "auc_method":      "rank-based (Mann-Whitney U), tie-aware",
     }
 
 
