@@ -15,7 +15,9 @@ ssl_context.check_hostname = False
 ssl_context.verify_mode = ssl.CERT_NONE
 
 KEYCLOAK_ADMIN_USER     = os.getenv("KEYCLOAK_ADMIN_USER", "admin")
-KEYCLOAK_ADMIN_PASSWORD = os.getenv("KEYCLOAK_ADMIN_PASSWORD", "***REMOVED***")
+KEYCLOAK_ADMIN_PASSWORD = os.getenv("KEYCLOAK_ADMIN_PASSWORD")
+if not KEYCLOAK_ADMIN_PASSWORD:
+    raise RuntimeError("KEYCLOAK_ADMIN_PASSWORD env var not set (see backend/.env.example)")
 
 
 async def get_admin_token() -> str:

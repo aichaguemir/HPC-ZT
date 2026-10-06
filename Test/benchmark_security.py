@@ -1,3 +1,4 @@
+import os
 #!/usr/bin/env python3
 """
 Security Layer Latency Benchmark — Secure HPC Job Portal
@@ -23,7 +24,9 @@ API_URL      = "https://localhost:8000"
 REALM        = "HPC-Project"
 CLIENT_ID    = "hpc-backend"
 USERNAME     = "aichaguemir"
-PASSWORD     = "***REMOVED***"
+PASSWORD     = os.environ.get("PORTAL_TEST_PASSWORD")
+if not PASSWORD:
+    raise RuntimeError("PORTAL_TEST_PASSWORD env var not set (see backend/.env.example)")
 ITERATIONS   = 100
 
 # ── Security config (copied from config.py) ────────────────────────────────

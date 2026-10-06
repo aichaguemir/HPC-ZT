@@ -1,3 +1,4 @@
+import os
 #!/usr/bin/env python3
 """
 End-to-End Latency Benchmark — Secure HPC Job Portal
@@ -19,7 +20,9 @@ API_URL        = "https://localhost:8000"
 REALM          = "HPC-Project"
 CLIENT_ID      = "hpc-backend"
 USERNAME       = "aichaguemir"
-PASSWORD       = "***REMOVED***"
+PASSWORD       = os.environ.get("PORTAL_TEST_PASSWORD")
+if not PASSWORD:
+    raise RuntimeError("PORTAL_TEST_PASSWORD env var not set (see backend/.env.example)")
 ITERATIONS     = 50
 JOB_POLL_INTERVAL = 2   # seconds between status checks
 JOB_TIMEOUT       = 300 # max seconds to wait for job completion

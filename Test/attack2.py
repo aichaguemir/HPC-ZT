@@ -1,11 +1,14 @@
 
 
 import hmac as hmac_module
+import os
 import hashlib
 import json
 
 # ── Stolen credentials ────────────────────────────────────────────────────
-CHAIN_SECRET = b"***REMOVED***"
+CHAIN_SECRET = os.environ.get("AUDIT_CHAIN_SECRET", "").encode()
+if not CHAIN_SECRET:
+    raise RuntimeError("AUDIT_CHAIN_SECRET env var not set (see backend/.env.example)")
 
 # ── CORRECT starting prev_hash — read directly from entry #1 in DB ───────
 # This is the actual prev_hash stored in the first audit entry.

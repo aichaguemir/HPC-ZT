@@ -29,7 +29,7 @@ SIGNAL_WEIGHTS = {
     "R3_geo":      0.18,
     "R4_temporal": 0.04,
     "R5_rate":     0.13,
-    "R7_cred":     0.35,  
+    "R6_cred":     0.35,  
     "S2_velocity": 0.07,
 }
 
@@ -42,15 +42,15 @@ TOTAL_WEIGHT = sum(SIGNAL_WEIGHTS.values())
 # ══════════════════════════════════════════════════════════════════════════
 
 COMBO_MULTIPLIERS = {
-    ("R3_geo",    "R7_cred"):     1.50,  # foreign location + failed logins
-    ("R2_device", "R7_cred"):     1.45,  # new device + failed logins → account takeover
+    ("R3_geo",    "R6_cred"):     1.50,  # foreign location + failed logins
+    ("R2_device", "R6_cred"):     1.45,  # new device + failed logins → account takeover
     ("R3_geo",    "R2_device"):   1.35,  # foreign location + new device → remote attacker
     ("R5_rate",   "S2_velocity"): 1.30,  # high rate + regular timing → bot confirmed
     ("R4_temporal","R5_rate"):    1.25,  # off-hours + high rate → automated attack
     ("R2_device", "R5_rate"):     1.20,  # new device + high rate → scripted attack
     ("R1_baseline","R2_device"):  1.15,  # huge job + new device → resource abuse
     ("R3_geo",    "R5_rate"):     1.30,  # foreign + high rate → remote scripted attack 
-    ("R1_baseline" , "R7_cred"): 1.45 ,  # huge job + failed logins → account takeover
+    ("R1_baseline" , "R6_cred"): 1.45 ,  # huge job + failed logins → account takeover
 }
 
 
@@ -97,9 +97,9 @@ RATE_THRESHOLDS = {
     "admin":      10,
 }
 
-# R7 — credential risk (raised from > 0 to > 2)
+# R6 — credential risk (raised from > 0 to > 2)
 
-R7_FAILED_LOGIN_THRESHOLD = 2
+R6_FAILED_LOGIN_THRESHOLD = 2
 
 # S2 — velocity pattern
 VELOCITY_MIN_SAMPLES  = 4      # minimum submissions to compute CV
@@ -521,7 +521,7 @@ async def collect_signals(
         "R3_geo":      0.0,
         "R4_temporal": 0.0,
         "R5_rate":     0.0,
-        "R7_cred":     0.0,
+        "R6_cred":     0.0,
         "S2_velocity": 0.0,
     }
     now = datetime.now(timezone.utc)
@@ -752,7 +752,7 @@ async def collect_signals(
         signals["R5_rate"] = 0.0
         
         
-    # ── R7: Credential Risk ───────────────────────────────────────────────
+    # ── R6: Credential Risk ───────────────────────────────────────────────
 
         
     fail_res = await db.execute(
@@ -764,11 +764,11 @@ async def collect_signals(
     fail_count = fail_res.scalar()
 
     if fail_count > 4:
-        signals["R7_cred"] = 1.0
-    elif fail_count > R7_FAILED_LOGIN_THRESHOLD:
-        signals["R7_cred"] = 0.7
+        signals["R6_cred"] = 1.0
+    elif fail_count > R6_FAILED_LOGIN_THRESHOLD:
+        signals["R6_cred"] = 0.7
     else:
-         signals["R7_cred"] = 0.0    
+         signals["R6_cred"] = 0.0    
 
         
         
@@ -816,7 +816,7 @@ async def collect_signals(
     f"R3={signals['R3_geo']:.2f} "
     f"R4={signals['R4_temporal']:.2f} "
     f"R5={signals['R5_rate']:.2f} "
-    f"R7={signals['R7_cred']:.2f} "
+    f"R6={signals['R6_cred']:.2f} "
     f"S2={signals['S2_velocity']:.2f} "
     f"fail_count={fail_count}"
     ) 
@@ -950,13 +950,13 @@ async def run_carta(
     # Layer 4 — 2D policy decision
     # Use the higher of request_score and session_score for policy enforcement.
     # The EMA session score smooths gradual drift but must not dampen a sudden
-    # high-risk spike (e.g. R7 firing with 5 failed logins on an otherwise clean
-    # session). Without this, a user with previous_score=0.0 who triggers R7=1.0
+    # high-risk spike (e.g. R6 firing with 5 failed logins on an otherwise clean
+    # session). Without this, a user with previous_score=0.0 who triggers R6=1.0
     # produces session_score≈0.08 via EMA → wrongly falls into "low" tier → allow.
     # Taking the max ensures the worst observed signal in this request is enforced.
     cluster_load = await get_cluster_utilization()
     policy_score = max(request_score, session_score) 
-    if signals.get("R7_cred", 0.0) == 1.0:
+    if signals.get("R6_cred", 0.0) == 1.0:
         policy_score = max(policy_score, THRESHOLD_MFA)
     decision     = compute_2d_policy(policy_score, cluster_load)
 

@@ -10,7 +10,8 @@ API="https://localhost/api/v1"         # Nginx → FastAPI
 REALM="HPC-Project"
 CLIENT="hpc-backend"
 USER="aichaguemir"
-PASS="***REMOVED***"
+: "${PORTAL_TEST_PASSWORD:?PORTAL_TEST_PASSWORD env var must be set}"
+PASS="$PORTAL_TEST_PASSWORD"
 
 # ── 1. Login ───────────────────────────────────────────────────────
 echo "==> Authenticating..."
